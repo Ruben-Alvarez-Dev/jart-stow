@@ -38,6 +38,7 @@ type Theme struct {
 	CardTitle  lipgloss.Style
 
 	Selected  lipgloss.Style
+	NavBar    lipgloss.Style
 	HelpText  lipgloss.Style
 	ErrorText lipgloss.Style
 }
@@ -96,6 +97,12 @@ func NewTheme() *Theme {
 	t.Selected = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(ColorHighlight)
+
+	// Global navigation bar
+	t.NavBar = lipgloss.NewStyle().
+		Background(lipgloss.Color("0")).
+		Foreground(ColorPrimary).
+		Padding(0, 1)
 
 	// Help text: muted, small
 	t.HelpText = lipgloss.NewStyle().

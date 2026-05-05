@@ -3,9 +3,13 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/screens"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Screen constants define the 7 available screens in the TUI.
@@ -146,15 +150,40 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// View renders the current active screen.
+// View renders the current active screen with a global navigation bar.
 func (m *MainModel) View() string {
 	if !m.ready {
 		return "Initializing..."
 	}
 
+	var content string
 	if m.pages[m.screen] == nil {
-		return "Screen not available"
+		content = "Screen not available"
+	} else {
+		content = m.pages[m.screen].View()
 	}
 
-	return m.pages[m.screen].View()
+	return lipgloss.JoinVertical(lipgloss.Top, content, m.renderGlobalNav())
+}
+
+// screenTitles maps screen index to display name.
+var screenTitles = []string{"Dashboard", "Scanner", "Exclusions", "Rules", "Audit", "Hygiene", "Report"}
+
+// renderGlobalNav builds the bottom navigation bar with the current screen highlighted.
+func (m *MainModel) renderGlobalNav() string {
+	var items []string
+	for i, title := range screenTitles {
+		key := fmt.Sprintf("%d", i+1)
+		if i == m.screen {
+			items = append(items, m.theme.Highlight.Render(key+":"+title))
+		} else {
+			items = append(items, m.theme.HelpText.Render(key+":"+title))
+		}
+	}
+
+	left := strings.Join(items, "  ")
+	right := m.theme.HelpText.Render("q:Quit")
+	nav := lipgloss.JoinHorizontal(lipgloss.Top, left, "    ", right)
+
+	return m.theme.NavBar.Width(m.width).Render(nav)
 }
