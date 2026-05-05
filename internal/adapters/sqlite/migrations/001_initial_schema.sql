@@ -1,10 +1,8 @@
 -- Migration 001: Initial Schema
 -- Creates all core tables, indexes, and default data for Jart-Stow.
--- Applies PRAGMA settings and seeds junk_categories.
-
-PRAGMA journal_mode=WAL;
-PRAGMA busy_timeout=5000;
-PRAGMA foreign_keys=ON;
+-- PRAGMA settings (journal_mode, busy_timeout, foreign_keys) are applied
+-- in connection.go before migrations run, since journal_mode=WAL cannot
+-- be changed inside a transaction.
 
 -- ============================================================================
 -- Projects

@@ -1,49 +1,36 @@
-// Package cli provides the command-line interface for jart-stow.
-// Uses the standard library; Cobra integration will come when dependencies are available.
+// Package cli provides the Cobra command-line interface for jart-stow.
 package cli
 
 import (
 	"fmt"
-	"os"
+
+	"github.com/spf13/cobra"
 )
 
-const usage = `jart-stow — macOS development hygiene & backup exclusion manager
+// NewRootCommand creates the root Cobra command for jart-stow.
+func NewRootCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "jart-stow",
+		Short: "macOS development hygiene & backup exclusion manager",
+		Long: `Jart-Stow monitors configurable workspace roots for development artifacts
+and applies exclusions to Time Machine and Carbon Copy Cloner.
 
-Usage:
-  jart-stow [command]
+It also detects system junk (Docker, APFS snapshots, caches, temp files)
+for user-reviewed cleanup.`,
+		Version: "0.1.0-dev",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
 
-Available Commands (coming in Phase 1):
-  scan       Scan workspace roots for development artifacts
-  status     Show current daemon and exclusion status
-  daemon     Manage the background daemon (install, start, stop)
-  inspect    Inspect a specific project
-  audit      Audit all projects against hygiene rules
-  rule       Manage hygiene rules
-  report     View exclusion and cleanup reports
-  api        Start the REST API server
-  help       Show this help message
+	return cmd
+}
 
-Run 'jart-stow help' for more information.
-`
-
-// Execute processes the CLI arguments and dispatches to the appropriate handler.
+// Execute runs the root command and exits on error.
 func Execute() error {
-	args := os.Args[1:]
-	if len(args) == 0 {
-		fmt.Print(usage)
-		return nil
+	cmd := NewRootCommand()
+	if err := cmd.Execute(); err != nil {
+		return fmt.Errorf("jart-stow: %w", err)
 	}
-
-	switch args[0] {
-	case "help", "-h", "--help":
-		fmt.Print(usage)
-		return nil
-	case "version", "--version":
-		fmt.Println("jart-stow version 0.1.0-dev")
-		return nil
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", args[0])
-		fmt.Fprint(os.Stderr, usage)
-		return fmt.Errorf("unknown command: %s", args[0])
-	}
+	return nil
 }
