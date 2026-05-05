@@ -2,16 +2,16 @@
 
 ## v1.0.0 — MVP
 
-- [ ] FSEvents daemon with multi-root watching
-- [ ] Automatic project detection and dev artifact scanning
-- [ ] Time Machine exclusion via `tmutil`
-- [ ] Carbon Copy Cloner exclusion via `Exclusions.txt`
-- [ ] Bubble Tea TUI with 7 screens
-- [ ] FastAPI 3.0 REST API with 20+ endpoints
-- [ ] SQLite persistence (WAL mode)
-- [ ] System hygiene: junk detection (Docker, APFS, caches, temp)
-- [ ] Granular user verification for all junk cleanup
-- [ ] launchd integration for auto-start
+- [x] FSEvents daemon with multi-root watching
+- [x] Automatic project detection and dev artifact scanning
+- [x] Time Machine exclusion via `tmutil`
+- [x] Carbon Copy Cloner exclusion via `Exclusions.txt`
+- [x] Bubble Tea TUI with 7 screens
+- [x] FastAPI 3.0 REST API with 22 endpoints
+- [x] SQLite persistence (WAL mode)
+- [x] System hygiene: junk detection (Docker, APFS, caches, temp)
+- [x] Granular user verification for all junk cleanup
+- [x] launchd integration for auto-start
 - [ ] Homebrew installation
 - [ ] MkDocs documentation published to GitHub Pages
 

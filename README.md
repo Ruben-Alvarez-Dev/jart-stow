@@ -12,12 +12,38 @@ Jart-Stow performs two distinct but complementary functions:
 
 ## Quick Start
 
-```bash
-brew install jart-stow
+### Build from source (Phase 1 — current)
 
-jart-stow daemon install
-jart-stow scan
-jart-stow status
+```bash
+git clone https://github.com/Ruben-Alvarez-Dev/jart-stow.git
+cd jart-stow
+
+# Build the Go binary
+go build -o jart-stow ./cmd/jart-stow/
+
+# Try it
+./jart-stow --help
+./jart-stow status
+./jart-stow scan
+
+# Run the daemon
+./jart-stow daemon run
+```
+
+### API (Python/FastAPI)
+
+```bash
+cd api
+pip install -e .
+uvicorn app.main:app --port 8420
+```
+
+API available at http://localhost:8420/docs
+
+### Homebrew (Phase 2 — coming soon)
+
+```bash
+brew install jart-stow        # Not yet available
 ```
 
 ---
@@ -25,6 +51,15 @@ jart-stow status
 ## Documentation
 
 Full documentation at [ruben-alvarez-dev.github.io/jart-stow](https://ruben-alvarez-dev.github.io/jart-stow)
+
+---
+
+## Architecture
+
+- **Go binary** (`jart-stow`): Daemon, TUI (Bubble Tea), CLI (Cobra)
+- **Python API** (FastAPI 3.0): REST API on port 8420
+- **Shared state**: Single SQLite database in WAL mode at `~/.local/share/jart-stow/jart-stow.db`
+- **Hexagonal architecture**: Domain → Ports → Adapters
 
 ---
 
