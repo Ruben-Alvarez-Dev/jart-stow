@@ -17,8 +17,6 @@ type navigator interface {
 }
 
 // MainModel is the root Bubble Tea model with a navigation stack.
-// The main menu is always at the bottom; sub-screens are pushed on Enter
-// and popped on Escape.
 type MainModel struct {
 	theme *theme.Theme
 	stack []tea.Model
@@ -79,6 +77,11 @@ func (m *MainModel) Init() tea.Cmd {
 	)
 }
 
+// sizeMsg returns a WindowSizeMsg with current stored dimensions.
+func (m *MainModel) sizeMsg() tea.WindowSizeMsg {
+	return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+}
+
 // Update handles window resize and delegates input to the top of the stack.
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -92,26 +95,39 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := top.Update(msg)
 	m.stack[len(m.stack)-1] = model
 
-	if nav, ok := model.(navigator); ok {
-		req := nav.NavRequest()
-		if req != "" {
-			switch req {
-			case "back":
-				if len(m.stack) > 1 {
-					m.stack = m.stack[:len(m.stack)-1]
-				}
-				top := m.stack[len(m.stack)-1]
-				return m, top.Init()
-			case "quit":
-				return m, tea.Quit
-			default:
-				if target := nav.NavTarget(); target != nil {
-					m.stack = append(m.stack, target)
-					return m, target.Init()
-				}
-			}
-			nav.ClearNav()
-			m.stack[len(m.stack)-1] = nav.(tea.Model)
+	nav, ok := model.(navigator)
+	if !ok {
+		return m, cmd
+	}
+
+	req := nav.NavRequest()
+	if req == "" {
+		return m, cmd
+	}
+
+	// Clear the request immediately to prevent re-triggering.
+	nav.ClearNav()
+	m.stack[len(m.stack)-1] = nav.(tea.Model)
+
+	switch req {
+	case "back":
+		if len(m.stack) > 1 {
+			m.stack = m.stack[:len(m.stack)-1]
+		}
+		target := m.stack[len(m.stack)-1]
+		target, _ = target.Update(m.sizeMsg())
+		m.stack[len(m.stack)-1] = target
+		return m, target.Init()
+
+	case "quit":
+		return m, tea.Quit
+
+	default:
+		// "forward" — push the target screen onto the stack.
+		if target := nav.NavTarget(); target != nil {
+			target, _ = target.Update(m.sizeMsg())
+			m.stack = append(m.stack, target)
+			return m, target.Init()
 		}
 	}
 
