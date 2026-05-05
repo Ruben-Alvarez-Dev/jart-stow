@@ -28,6 +28,8 @@ type RulesModel struct {
 	cursor int
 	focus  int // 0 = global section, 1 = project overrides section
 	loaded bool
+
+	navRequest string
 }
 
 // NewRulesModel creates a new RulesModel.
@@ -61,6 +63,12 @@ func (m *RulesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			m.focus = (m.focus + 1) % 2
 			m.cursor = 0
+		case "esc":
+			m.navRequest = "back"
+		case "backspace":
+			m.navRequest = "back"
+		case "q":
+			m.navRequest = "quit"
 		}
 	}
 	return m, nil
@@ -226,5 +234,14 @@ func (m *RulesModel) renderProjectSection() string {
 }
 
 func (m *RulesModel) renderNavBar() string {
-	return m.theme.HelpText.Render("A: Add Rule  |  E: Edit  |  D: Delete  |  up/down: Navigate")
+	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  A: Add Rule  |  E: Edit  |  D: Delete  |  up/down: Navigate")
 }
+
+// NavRequest returns the pending navigation request, or "" if none.
+func (m *RulesModel) NavRequest() string { return m.navRequest }
+
+// NavTarget returns the target model for navigation (nil for back/quit).
+func (m *RulesModel) NavTarget() tea.Model { return nil }
+
+// ClearNav clears the navigation request.
+func (m *RulesModel) ClearNav() { m.navRequest = "" }

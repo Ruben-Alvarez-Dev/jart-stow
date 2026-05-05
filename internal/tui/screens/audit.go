@@ -24,6 +24,8 @@ type AuditModel struct {
 	cursor      int
 	loaded      bool
 	projectsLen int
+
+	navRequest string
 }
 
 // NewAuditModel creates a new AuditModel.
@@ -57,6 +59,12 @@ func (m *AuditModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < m.projectsLen-1 {
 				m.cursor++
 			}
+		case "esc":
+			m.navRequest = "back"
+		case "backspace":
+			m.navRequest = "back"
+		case "q":
+			m.navRequest = "quit"
 		}
 	}
 	return m, nil
@@ -197,8 +205,17 @@ func (m *AuditModel) renderSummaryBar() string {
 }
 
 func (m *AuditModel) renderNavBar() string {
-	return m.theme.HelpText.Render("up/down Navigate  |  Right Expand  |  Space: Inspect  |  A: Audit All")
+	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  up/down Navigate  |  Right Expand  |  Space: Inspect  |  A: Audit All")
 }
+
+// NavRequest returns the pending navigation request, or "" if none.
+func (m *AuditModel) NavRequest() string { return m.navRequest }
+
+// NavTarget returns the target model for navigation (nil for back/quit).
+func (m *AuditModel) NavTarget() tea.Model { return nil }
+
+// ClearNav clears the navigation request.
+func (m *AuditModel) ClearNav() { m.navRequest = "" }
 
 // Helper functions for the audit screen
 

@@ -22,6 +22,8 @@ type ReportModel struct {
 
 	loaded         bool
 	exclusionsList []domain.Exclusion
+
+	navRequest string
 }
 
 // NewReportModel creates a new ReportModel.
@@ -44,6 +46,16 @@ func (m *ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.navRequest = "back"
+		case "backspace":
+			m.navRequest = "back"
+		case "q":
+			m.navRequest = "quit"
+		}
 	}
 	return m, nil
 }
@@ -287,8 +299,17 @@ func (m *ReportModel) renderDaemonSection() string {
 }
 
 func (m *ReportModel) renderNavBar() string {
-	return m.theme.HelpText.Render("1-7 Screens  |  E: Export  |  q Quit")
+	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  1-7 Screens  |  E: Export")
 }
+
+// NavRequest returns the pending navigation request, or "" if none.
+func (m *ReportModel) NavRequest() string { return m.navRequest }
+
+// NavTarget returns the target model for navigation (nil for back/quit).
+func (m *ReportModel) NavTarget() tea.Model { return nil }
+
+// ClearNav clears the navigation request.
+func (m *ReportModel) ClearNav() { m.navRequest = "" }
 
 func formatFloat(v float64) string {
 	intPart := int(v)

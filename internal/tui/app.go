@@ -1,43 +1,34 @@
 // Package tui is the Bubble Tea terminal user interface for Jart-Stow.
-// It manages screen navigation and delegates rendering to individual screen models.
+// It uses a hierarchical navigation model: a main menu as the central hub,
+// with sub-screens pushed/popped on a navigation stack.
 package tui
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/screens"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
-// Screen constants define the 7 available screens in the TUI.
-const (
-	ScreenDashboard  = 0
-	ScreenScanner    = 1
-	ScreenExclusions = 2
-	ScreenRules      = 3
-	ScreenAudit      = 4
-	ScreenHygiene    = 5
-	ScreenReport     = 6
-)
+// navigator is implemented by models that handle their own navigation.
+type navigator interface {
+	NavRequest() string
+	NavTarget() tea.Model
+	ClearNav()
+}
 
-// MainModel is the root Bubble Tea model for the TUI.
-// It manages screen navigation and delegates rendering to individual screens.
+// MainModel is the root Bubble Tea model with a navigation stack.
+// The main menu is always at the bottom; sub-screens are pushed on Enter
+// and popped on Escape.
 type MainModel struct {
-	theme  *theme.Theme
-	screen int
-	pages  [7]tea.Model
+	theme *theme.Theme
+	stack []tea.Model
 
 	width  int
 	height int
 	ready  bool
 }
 
-// NewMainModel creates a fully initialized MainModel with all 7 screens wired up.
-// All service providers may be nil; screens gracefully handle missing data.
-// The provider interfaces are defined in the screens package and shared across screens.
+// NewMainModel creates the TUI with the main menu as entry point.
 func NewMainModel(
 	daemon screens.DaemonStatusProvider,
 	watchRoots screens.WatchRootProvider,
@@ -49,141 +40,88 @@ func NewMainModel(
 ) *MainModel {
 	t := theme.NewTheme()
 
-	m := &MainModel{
-		theme:  t,
-		screen: ScreenDashboard,
+	buildDashboard := func() tea.Model {
+		return screens.NewDashboardModel(t, daemon, watchRoots, projects, exclusions, events)
+	}
+	buildScanner := func() tea.Model {
+		return screens.NewScannerModel(t, watchRoots)
+	}
+	buildExclusions := func() tea.Model {
+		return screens.NewExclusionsModel(t, exclusions)
+	}
+	buildRules := func() tea.Model {
+		return screens.NewRulesModel(t, rules)
+	}
+	buildAudit := func() tea.Model {
+		return screens.NewAuditModel(t, projects, exclusions)
+	}
+	buildHygiene := func() tea.Model {
+		return screens.NewHygieneModel(t, junk)
+	}
+	buildReport := func() tea.Model {
+		return screens.NewReportModel(t, exclusions, events)
 	}
 
-	m.pages[ScreenDashboard] = screens.NewDashboardModel(t, daemon, watchRoots, projects, exclusions, events)
-	m.pages[ScreenScanner] = screens.NewScannerModel(t, watchRoots)
-	m.pages[ScreenExclusions] = screens.NewExclusionsModel(t, exclusions)
-	m.pages[ScreenRules] = screens.NewRulesModel(t, rules)
-	m.pages[ScreenAudit] = screens.NewAuditModel(t, projects, exclusions)
-	m.pages[ScreenHygiene] = screens.NewHygieneModel(t, junk)
-	m.pages[ScreenReport] = screens.NewReportModel(t, exclusions, events)
+	menu := NewMainMenu(t, buildDashboard, buildScanner, buildExclusions,
+		buildRules, buildAudit, buildHygiene, buildReport)
 
-	return m
+	return &MainModel{
+		theme: t,
+		stack: []tea.Model{menu},
+	}
 }
 
-// Init initializes the main model and sets the window title.
+// Init initializes the TUI.
 func (m *MainModel) Init() tea.Cmd {
 	return tea.Batch(
-		m.screenInit(),
+		m.stack[len(m.stack)-1].Init(),
 		tea.SetWindowTitle("Jart-Stow"),
 	)
 }
 
-// screenInit calls Init on the current active screen.
-func (m *MainModel) screenInit() tea.Cmd {
-	if m.pages[m.screen] == nil {
-		return nil
-	}
-	return m.pages[m.screen].Init()
-}
-
-// Update processes messages and delegates to the current screen.
+// Update handles window resize and delegates input to the top of the stack.
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.ready = true
+	}
 
-		// Forward resize to all screens
-		for _, page := range m.pages {
-			if page != nil {
-				if _, cmd := page.Update(msg); cmd != nil {
-					cmds = append(cmds, cmd)
+	top := m.stack[len(m.stack)-1]
+	model, cmd := top.Update(msg)
+	m.stack[len(m.stack)-1] = model
+
+	if nav, ok := model.(navigator); ok {
+		req := nav.NavRequest()
+		if req != "" {
+			switch req {
+			case "back":
+				if len(m.stack) > 1 {
+					m.stack = m.stack[:len(m.stack)-1]
+				}
+				top := m.stack[len(m.stack)-1]
+				return m, top.Init()
+			case "quit":
+				return m, tea.Quit
+			default:
+				if target := nav.NavTarget(); target != nil {
+					m.stack = append(m.stack, target)
+					return m, target.Init()
 				}
 			}
-		}
-
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
-
-		case "1":
-			m.screen = ScreenDashboard
-			cmds = append(cmds, m.screenInit())
-		case "2":
-			m.screen = ScreenScanner
-			cmds = append(cmds, m.screenInit())
-		case "3":
-			m.screen = ScreenExclusions
-			cmds = append(cmds, m.screenInit())
-		case "4":
-			m.screen = ScreenRules
-			cmds = append(cmds, m.screenInit())
-		case "5":
-			m.screen = ScreenAudit
-			cmds = append(cmds, m.screenInit())
-		case "6":
-			m.screen = ScreenHygiene
-			cmds = append(cmds, m.screenInit())
-		case "7":
-			m.screen = ScreenReport
-			cmds = append(cmds, m.screenInit())
-
-		default:
-			// Forward key to the current screen
-			if m.pages[m.screen] != nil {
-				_, cmd := m.pages[m.screen].Update(msg)
-				if cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-			}
-		}
-
-	default:
-		// Forward all other messages to the current screen
-		if m.pages[m.screen] != nil {
-			_, cmd := m.pages[m.screen].Update(msg)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
+			nav.ClearNav()
+			m.stack[len(m.stack)-1] = nav.(tea.Model)
 		}
 	}
 
-	return m, tea.Batch(cmds...)
+	return m, cmd
 }
 
-// View renders the current active screen with a global navigation bar.
+// View renders the top of the navigation stack.
 func (m *MainModel) View() string {
 	if !m.ready {
 		return "Initializing..."
 	}
-
-	var content string
-	if m.pages[m.screen] == nil {
-		content = "Screen not available"
-	} else {
-		content = m.pages[m.screen].View()
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Top, content, m.renderGlobalNav())
-}
-
-// screenTitles maps screen index to display name.
-var screenTitles = []string{"Dashboard", "Scanner", "Exclusions", "Rules", "Audit", "Hygiene", "Report"}
-
-// renderGlobalNav builds the bottom navigation bar with the current screen highlighted.
-func (m *MainModel) renderGlobalNav() string {
-	var items []string
-	for i, title := range screenTitles {
-		key := fmt.Sprintf("%d", i+1)
-		if i == m.screen {
-			items = append(items, m.theme.Highlight.Render(key+":"+title))
-		} else {
-			items = append(items, m.theme.HelpText.Render(key+":"+title))
-		}
-	}
-
-	left := strings.Join(items, "  ")
-	right := m.theme.HelpText.Render("q:Quit")
-	nav := lipgloss.JoinHorizontal(lipgloss.Top, left, "    ", right)
-
-	return m.theme.NavBar.Width(m.width).Render(nav)
+	return m.stack[len(m.stack)-1].View()
 }

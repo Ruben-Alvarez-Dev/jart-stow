@@ -24,6 +24,8 @@ type ScannerModel struct {
 
 	// Selected watch root index (in the left panel)
 	selectedPath int
+
+	navRequest string
 }
 
 // NewScannerModel creates a new ScannerModel.
@@ -59,6 +61,12 @@ func (m *ScannerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == 0 {
 				m.selectedPath++
 			}
+		case "esc":
+			m.navRequest = "back"
+		case "backspace":
+			m.navRequest = "back"
+		case "q":
+			m.navRequest = "quit"
 		}
 	}
 	return m, nil
@@ -170,8 +178,17 @@ func (m *ScannerModel) renderLogPanel() string {
 }
 
 func (m *ScannerModel) renderNavBar() string {
-	return m.theme.HelpText.Render("Space: Toggle  |  Enter: Scan  |  Tab: Switch panels")
+	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  Space: Toggle  |  Enter: Scan  |  Tab: Switch panels")
 }
+
+// NavRequest returns the pending navigation request, or "" if none.
+func (m *ScannerModel) NavRequest() string { return m.navRequest }
+
+// NavTarget returns the target model for navigation (nil for back/quit).
+func (m *ScannerModel) NavTarget() tea.Model { return nil }
+
+// ClearNav clears the navigation request.
+func (m *ScannerModel) ClearNav() { m.navRequest = "" }
 
 func stringOfChar(c byte, n int) string {
 	buf := make([]byte, n)

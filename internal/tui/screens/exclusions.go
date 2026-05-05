@@ -41,6 +41,8 @@ type ExclusionsModel struct {
 	selected int
 	cursor   int
 	loaded   bool
+
+	navRequest string
 }
 
 // NewExclusionsModel creates a new ExclusionsModel.
@@ -82,6 +84,12 @@ func (m *ExclusionsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sort = (m.sort + 1) % 3
 		case "enter":
 			m.selected = m.cursor
+		case "esc":
+			m.navRequest = "back"
+		case "backspace":
+			m.navRequest = "back"
+		case "q":
+			m.navRequest = "quit"
 		}
 	}
 	return m, nil
@@ -266,8 +274,17 @@ func (m *ExclusionsModel) renderDetailPanel() string {
 }
 
 func (m *ExclusionsModel) renderNavBar() string {
-	return m.theme.HelpText.Render("up/down Navigate  |  Enter: Select  |  R: Restore  |  F: Filter")
+	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  up/down Navigate  |  Enter: Select  |  R: Restore  |  F: Filter")
 }
+
+// NavRequest returns the pending navigation request, or "" if none.
+func (m *ExclusionsModel) NavRequest() string { return m.navRequest }
+
+// NavTarget returns the target model for navigation (nil for back/quit).
+func (m *ExclusionsModel) NavTarget() tea.Model { return nil }
+
+// ClearNav clears the navigation request.
+func (m *ExclusionsModel) ClearNav() { m.navRequest = "" }
 
 func backupSystemAbbr(bs string) string {
 	switch bs {

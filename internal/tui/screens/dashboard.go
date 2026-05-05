@@ -33,6 +33,8 @@ type DashboardModel struct {
 	watchRootPaths []string
 	recentEvents   []domain.DaemonEvent
 	loaded         bool
+
+	navRequest string
 }
 
 // DaemonStatusProvider reports whether the daemon is running.
@@ -94,6 +96,16 @@ func (m *DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.navRequest = "back"
+		case "backspace":
+			m.navRequest = "back"
+		case "q":
+			m.navRequest = "quit"
+		}
 	}
 	return m, nil
 }
@@ -262,8 +274,17 @@ func (m *DashboardModel) renderActivitySection() string {
 }
 
 func (m *DashboardModel) renderNavBar() string {
-	return m.theme.HelpText.Render("1-7 Screens  |  ? Help  |  q Quit")
+	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  1-7 Screens  |  ? Help")
 }
+
+// NavRequest returns the pending navigation request, or "" if none.
+func (m *DashboardModel) NavRequest() string { return m.navRequest }
+
+// NavTarget returns the target model for navigation (nil for back/quit).
+func (m *DashboardModel) NavTarget() tea.Model { return nil }
+
+// ClearNav clears the navigation request.
+func (m *DashboardModel) ClearNav() { m.navRequest = "" }
 
 func (m *DashboardModel) renderLine(label, value string) string {
 	labelStyled := m.theme.Muted.Render(label + ":")

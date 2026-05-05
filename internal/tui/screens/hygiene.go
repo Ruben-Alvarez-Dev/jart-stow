@@ -32,6 +32,8 @@ type HygieneModel struct {
 	categories  []domain.JunkCategory
 	items       []domain.JunkItem
 	loaded      bool
+
+	navRequest string
 }
 
 // NewHygieneModel creates a new HygieneModel.
@@ -77,6 +79,12 @@ func (m *HygieneModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedCat = m.cursor
 				m.loadItems()
 			}
+		case "esc":
+			m.navRequest = "back"
+		case "backspace":
+			m.navRequest = "back"
+		case "q":
+			m.navRequest = "quit"
 		}
 	}
 	return m, nil
@@ -269,8 +277,17 @@ func (m *HygieneModel) renderDetailPanel() string {
 }
 
 func (m *HygieneModel) renderNavBar() string {
-	return m.theme.HelpText.Render("up/down Navigate  |  Space: Toggle  |  A: Approve  |  S: Skip  |  C: Clean All")
+	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  up/down Navigate  |  Space: Toggle  |  A: Approve  |  S: Skip  |  C: Clean All")
 }
+
+// NavRequest returns the pending navigation request, or "" if none.
+func (m *HygieneModel) NavRequest() string { return m.navRequest }
+
+// NavTarget returns the target model for navigation (nil for back/quit).
+func (m *HygieneModel) NavTarget() tea.Model { return nil }
+
+// ClearNav clears the navigation request.
+func (m *HygieneModel) ClearNav() { m.navRequest = "" }
 
 // scannerEmoji returns an icon for a scanner type.
 func scannerEmoji(scanner domain.ScannerName) string {
