@@ -1,4 +1,3 @@
-package ccc
 // Package ccc implements the BackupProvider port for Carbon Copy Cloner exclusions.
 package ccc
 

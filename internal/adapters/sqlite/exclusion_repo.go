@@ -1,5 +1,4 @@
 package sqlite
-package sqlite
 
 import (
 	"context"
@@ -108,11 +107,11 @@ func (r *ExclusionRepo) MarkRemoved(ctx context.Context, id int64) error {
 
 func scanExclusion(s scanner) (*domain.Exclusion, error) {
 	var (
-		e           domain.Exclusion
-		appliedAt   string
-		removedAt   sql.NullString
-		createdAt   string
-		backupSys   string
+		e         domain.Exclusion
+		appliedAt string
+		removedAt sql.NullString
+		createdAt string
+		backupSys string
 	)
 
 	if err := s.Scan(&e.ID, &e.ProjectID, &e.FolderPath, &e.PatternMatched,

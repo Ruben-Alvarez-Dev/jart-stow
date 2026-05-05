@@ -1,5 +1,4 @@
 package sqlite
-package sqlite
 
 import (
 	"context"
@@ -80,11 +79,11 @@ func (r *JunkCategoryRepo) InsertDefaults(ctx context.Context) error {
 
 func scanJunkCategory(s scanner) (*domain.JunkCategory, error) {
 	var (
-		c          domain.JunkCategory
-		scanner    string
-		createdAt  string
-		verifyReq  int
-		enabled    int
+		c         domain.JunkCategory
+		scanner   string
+		createdAt string
+		verifyReq int
+		enabled   int
 	)
 
 	if err := s.Scan(&c.ID, &c.Name, &scanner, &verifyReq, &enabled, &createdAt); err != nil {

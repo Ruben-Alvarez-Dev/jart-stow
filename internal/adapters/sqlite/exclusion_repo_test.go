@@ -1,5 +1,4 @@
 package sqlite
-package sqlite
 
 import (
 	"testing"
