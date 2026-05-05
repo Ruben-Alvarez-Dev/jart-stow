@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build Go binary
+        run: go build -o jart-stow ./cmd/jart-stow
+      - name: Package
+        run: |
+          tar -czf jart-stow-darwin-arm64.tar.gz jart-stow
+          shasum -a 256 jart-stow-darwin-arm64.tar.gz > checksums.txt
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            jart-stow-darwin-arm64.tar.gz
+            checksums.txt
+          generate_release_notes: true
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install MkDocs
+        run: pip install mkdocs-material
+      - name: Deploy docs
+        run: mkdocs gh-deploy --force

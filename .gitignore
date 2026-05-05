@@ -1,0 +1,43 @@
+# Jart-Stow — Gitignore
+
+# --- Binaries ---
+/jart-stow
+*.exe
+*.dll
+*.so
+*.dylib
+
+# --- Go ---
+/go.sum
+
+# --- Python ---
+api/__pycache__/
+api/app/__pycache__/
+api/app/**/__pycache__/
+api/*.pyc
+api/.venv/
+api/venv/
+api/.pytest_cache/
+api/.coverage
+api/coverage.xml
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# --- Build artifacts ---
+/dist/
+/build/
+
+# --- Data (runtime, not source) ---
+*.db
+*.db-wal
+*.db-shm
+
+# --- OS ---
+Thumbs.db
+.DS_Store

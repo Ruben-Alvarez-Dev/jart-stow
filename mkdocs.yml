@@ -1,0 +1,51 @@
+site_name: Jart-Stow
+site_description: macOS development hygiene & backup exclusion manager
+site_author: Ruben Alvarez
+repo_url: https://github.com/Ruben-Alvarez-Dev/jart-stow
+repo_name: jart-stow
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: cyan
+    accent: pink
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Decisions: architecture/decisions/
+  - API Reference: api/reference.md
+  - TUI Guide: tui/user-guide.md
+  - Daemon: daemon/lifecycle.md
+  - Development:
+    - Contributing: development/contributing.md
+    - Setup: development/setup.md
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - admonition
+  - footnotes
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+  - git-revision-date-localized
