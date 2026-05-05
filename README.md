@@ -12,7 +12,7 @@ Jart-Stow performs two distinct but complementary functions:
 
 ## Quick Start
 
-### Build from source (Phase 1 — current)
+### Build and run
 
 ```bash
 git clone https://github.com/Ruben-Alvarez-Dev/jart-stow.git
@@ -36,14 +36,6 @@ go build -o jart-stow ./cmd/jart-stow/
 cd api
 pip install -e .
 uvicorn app.main:app --port 8420
-```
-
-API available at http://localhost:8420/docs
-
-### Homebrew (Phase 2 — coming soon)
-
-```bash
-brew install jart-stow        # Not yet available
 ```
 
 ---
