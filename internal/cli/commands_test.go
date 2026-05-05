@@ -163,3 +163,69 @@ func TestNewTUICommand(t *testing.T) {
 	assert.True(t, called, "runner should have been called")
 	assert.Empty(t, strings.TrimSpace(out), "no output expected from stub runner")
 }
+
+func TestDaemonCommand_Structure(t *testing.T) {
+	cmd := NewRootCommand()
+	var daemon *cobra.Command
+	for _, c := range cmd.Commands() {
+		if c.Name() == "daemon" {
+			daemon = c
+			break
+		}
+	}
+	require.NotNil(t, daemon, "should find daemon subcommand")
+	assert.Equal(t, "Manage the Jart-Stow background daemon", daemon.Short)
+
+	expectedSubs := []string{"install", "uninstall", "start", "stop", "restart", "status", "logs", "run"}
+	names := map[string]bool{}
+	for _, c := range daemon.Commands() {
+		names[c.Name()] = true
+	}
+	for _, name := range expectedSubs {
+		assert.True(t, names[name], "daemon should have subcommand %q", name)
+	}
+}
+
+func TestDaemonCommand_Help(t *testing.T) {
+	cmd := NewRootCommand()
+	out, err := executeCommand(cmd, "daemon", "--help")
+	assert.NoError(t, err)
+	assert.Contains(t, out, "manage the Jart-Stow background daemon")
+	assert.Contains(t, out, "install")
+	assert.Contains(t, out, "run")
+}
+
+func TestDaemonRun_Help(t *testing.T) {
+	cmd := NewRootCommand()
+	out, err := executeCommand(cmd, "daemon", "run", "--help")
+	assert.NoError(t, err)
+	assert.Contains(t, out, "foreground")
+}
+
+func TestDaemonStatus_Syntax(t *testing.T) {
+	cmd := NewRootCommand()
+	_, err := executeCommand(cmd, "daemon", "status")
+	assert.NoError(t, err, "daemon status command should not error")
+}
+
+func TestDaemonLogs_Syntax(t *testing.T) {
+	cmd := NewRootCommand()
+	_, err := executeCommand(cmd, "daemon", "logs")
+	assert.NoError(t, err, "daemon logs command should not error")
+}
+
+func TestPlistTemplate(t *testing.T) {
+	// Verify the plist template contains the required keys
+	assert.Contains(t, plistTemplate, "<key>Label</key>")
+	assert.Contains(t, plistTemplate, "<key>ProgramArguments</key>")
+	assert.Contains(t, plistTemplate, "<key>RunAtLoad</key>")
+	assert.Contains(t, plistTemplate, "<key>KeepAlive</key>")
+	assert.Contains(t, plistTemplate, "<key>StandardOutPath</key>")
+	assert.Contains(t, plistTemplate, "<key>EnvironmentVariables</key>")
+	assert.Contains(t, plistTemplate, "JART_STOW_DB_PATH")
+	assert.Contains(t, plistTemplate, "JART_STOW_LOG_LEVEL")
+}
+
+func TestLaunchdLabel(t *testing.T) {
+	assert.Equal(t, "dev.rubenalvarez.jart-stow", launchdLabel)
+}

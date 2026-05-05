@@ -42,3 +42,4 @@ api/coverage.xml
 # --- OS ---
 Thumbs.db
 .DS_Store
+*.test

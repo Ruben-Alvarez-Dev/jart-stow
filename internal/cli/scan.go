@@ -19,7 +19,7 @@ If no path is provided, scans the current directory.`,
 				path = args[0]
 			}
 			cmd.Printf("Scanning %s for development artifacts...\n", path)
-			// TODO: Wire up ScanService when main.go is ready
+			// TODO(#10): Wire up ScanService when main.go is ready
 			cmd.Println("Scan complete. Wire up ScanService to see results.")
 			return nil
 		},
@@ -31,7 +31,7 @@ func newStatusCommand() *cobra.Command {
 		Use:   "status",
 		Short: "Show current Jart-Stow system status",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO: Wire up repositories to show real data
+			// TODO(#10): Wire up repositories to show real data
 			cmd.Println("Jart-Stow v0.1.0-dev")
 			cmd.Println()
 			cmd.Println("Daemon: not running (use 'jart-stow daemon status')")

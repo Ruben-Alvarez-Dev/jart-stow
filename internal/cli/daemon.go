@@ -233,7 +233,7 @@ func newDaemonRunCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Println("Starting daemon in foreground mode...")
 
-			// TODO: Wire up real adapters when main.go is ready
+			// TODO(#10): Wire up real adapters when main.go is ready
 			// For now, just run indefinitely
 			ctx := context.Background()
 			<-ctx.Done()
