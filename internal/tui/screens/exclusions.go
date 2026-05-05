@@ -36,11 +36,11 @@ type ExclusionsModel struct {
 	width  int
 	height int
 
-	filter     ExclusionFilter
-	sort       ExclusionSort
-	selected   int
-	cursor     int
-	loaded     bool
+	filter   ExclusionFilter
+	sort     ExclusionSort
+	selected int
+	cursor   int
+	loaded   bool
 }
 
 // NewExclusionsModel creates a new ExclusionsModel.

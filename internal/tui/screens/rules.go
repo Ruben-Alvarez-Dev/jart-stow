@@ -25,9 +25,9 @@ type RulesModel struct {
 	width  int
 	height int
 
-	cursor  int
-	focus   int // 0 = global section, 1 = project overrides section
-	loaded  bool
+	cursor int
+	focus  int // 0 = global section, 1 = project overrides section
+	loaded bool
 }
 
 // NewRulesModel creates a new RulesModel.

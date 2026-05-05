@@ -26,12 +26,12 @@ type HygieneModel struct {
 	width  int
 	height int
 
-	focus         int // 0 = categories sidebar, 1 = items panel
-	cursor        int
-	selectedCat   int
-	categories    []domain.JunkCategory
-	items         []domain.JunkItem
-	loaded        bool
+	focus       int // 0 = categories sidebar, 1 = items panel
+	cursor      int
+	selectedCat int
+	categories  []domain.JunkCategory
+	items       []domain.JunkItem
+	loaded      bool
 }
 
 // NewHygieneModel creates a new HygieneModel.

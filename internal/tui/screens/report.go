@@ -20,7 +20,7 @@ type ReportModel struct {
 	width  int
 	height int
 
-	loaded      bool
+	loaded         bool
 	exclusionsList []domain.Exclusion
 }
 

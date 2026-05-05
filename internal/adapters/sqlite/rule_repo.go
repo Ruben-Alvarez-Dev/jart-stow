@@ -1,4 +1,5 @@
 package sqlite
+package sqlite
 
 import (
 	"context"

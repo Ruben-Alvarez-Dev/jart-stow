@@ -1,1 +1,30 @@
-# API v1 schemas
+"""API v1 schemas — re-export all Pydantic models from domain/models.py."""
+
+from app.domain.models import (  # noqa: F401
+    DaemonEventResponse,
+    DaemonStatusResponse,
+    ErrorDetail,
+    ErrorResponse,
+    ExclusionCreate,
+    ExclusionResponse,
+    HealthResponse,
+    JunkBatchUpdate,
+    JunkCategoryResponse,
+    JunkCategoryUpdate,
+    JunkCleanResponse,
+    JunkItemResponse,
+    JunkItemUpdate,
+    JunkScanRequest,
+    JunkScanResponse,
+    ProjectDetail,
+    ProjectResponse,
+    ProjectUpdate,
+    ReportHistoryPoint,
+    ReportSummaryResponse,
+    RuleCreate,
+    RuleResponse,
+    RuleUpdate,
+    WatchRootCreate,
+    WatchRootResponse,
+    WatchRootUpdate,
+)

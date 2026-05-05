@@ -9,12 +9,12 @@ import (
 
 // Color constants used throughout the TUI.
 const (
-	ColorPrimary   = lipgloss.Color("6")  // Cyan
-	ColorSuccess   = lipgloss.Color("2")  // Green
-	ColorWarning   = lipgloss.Color("3")  // Yellow
-	ColorDanger    = lipgloss.Color("1")  // Red
-	ColorMuted     = lipgloss.Color("8")  // Bright black (gray)
-	ColorHighlight = lipgloss.Color("5")  // Magenta
+	ColorPrimary   = lipgloss.Color("6") // Cyan
+	ColorSuccess   = lipgloss.Color("2") // Green
+	ColorWarning   = lipgloss.Color("3") // Yellow
+	ColorDanger    = lipgloss.Color("1") // Red
+	ColorMuted     = lipgloss.Color("8") // Bright black (gray)
+	ColorHighlight = lipgloss.Color("5") // Magenta
 )
 
 // Theme holds all the styled elements used across the TUI.

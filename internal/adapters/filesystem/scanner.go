@@ -78,9 +78,9 @@ func (s *TempScanner) Scan(ctx context.Context, category domain.JunkCategory) ([
 
 			modTime := fileInfo.ModTime()
 			items = append(items, domain.JunkItem{
-				CategoryID:     category.ID,
-				Path:           fullPath,
-				Description:    fmt.Sprintf("Stale temp file/dir: %s (%s old)", entry.Name(),
+				CategoryID: category.ID,
+				Path:       fullPath,
+				Description: fmt.Sprintf("Stale temp file/dir: %s (%s old)", entry.Name(),
 					time.Since(modTime).Truncate(time.Hour).String()),
 				SizeBytes:      size,
 				LastAccessed:   &modTime,
@@ -159,9 +159,9 @@ func (s *CacheScanner) Scan(ctx context.Context, category domain.JunkCategory) (
 			}
 
 			items = append(items, domain.JunkItem{
-				CategoryID:     category.ID,
-				Path:           fullPath,
-				Description:    fmt.Sprintf("Cache directory: %s (%s)", entry.Name(),
+				CategoryID: category.ID,
+				Path:       fullPath,
+				Description: fmt.Sprintf("Cache directory: %s (%s)", entry.Name(),
 					formatBytes(size)),
 				SizeBytes:      size,
 				LastAccessed:   modTime,
@@ -235,9 +235,9 @@ func (s *XcodeScanner) Scan(ctx context.Context, category domain.JunkCategory) (
 		}
 
 		items = append(items, domain.JunkItem{
-			CategoryID:     category.ID,
-			Path:           fullPath,
-			Description:    fmt.Sprintf("Xcode DerivedData: %s (%s)", entry.Name(),
+			CategoryID: category.ID,
+			Path:       fullPath,
+			Description: fmt.Sprintf("Xcode DerivedData: %s (%s)", entry.Name(),
 				formatBytes(size)),
 			SizeBytes:      size,
 			LastAccessed:   modTime,
