@@ -23,6 +23,15 @@ for user-reviewed cleanup.`,
 		},
 	}
 
+	// Register subcommands
+	cmd.AddCommand(newDaemonCommand())
+	cmd.AddCommand(newScanCommand())
+	cmd.AddCommand(newStatusCommand())
+	cmd.AddCommand(newInspectCommand())
+	cmd.AddCommand(newAuditCommand())
+	cmd.AddCommand(newRuleCommand())
+	cmd.AddCommand(newReportCommand())
+
 	return cmd
 }
 
