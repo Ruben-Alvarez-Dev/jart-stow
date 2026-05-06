@@ -41,10 +41,10 @@ type Theme struct {
 	CardTitle  lipgloss.Style
 
 	// Selection styles with background highlight
-	Selected         lipgloss.Style
-	SelectedRow      lipgloss.Style
-	SelectedItem     lipgloss.Style
-	SelectedCard     lipgloss.Style
+	Selected     lipgloss.Style
+	SelectedRow  lipgloss.Style
+	SelectedItem lipgloss.Style
+	SelectedCard lipgloss.Style
 
 	// Navigation and info
 	NavBar    lipgloss.Style

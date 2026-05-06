@@ -61,7 +61,7 @@ func findCobraSubcommand(parent *cobra.Command, name string) *cobra.Command {
 	return nil
 }
 
-// runTUI starts the Bubble Tea TUI with real data providers wired to SQLite.
+// runTUI starts the Bubble Tea TUI with real data providers and action services wired to SQLite.
 func runTUI(_ *cobra.Command, _ []string) error {
 	dbPath := getDBPath()
 	ctx := context.Background()
@@ -73,14 +73,34 @@ func runTUI(_ *cobra.Command, _ []string) error {
 	defer conn.Close()
 
 	repos := sqlite.NewRepositorySet(conn)
+
+	// Create real services for interactive functionality
+	scanService := services.NewScanService(0, nil)
+
+	backups := []ports.BackupProvider{
+		tmutil.NewAdapter(""),
+		ccc.NewAdapter(""),
+	}
+	excludeService := services.NewExcludeService(
+		repos.Projects, repos.Exclusions, scanService, backups...,
+	)
+	junkService := createJunkScanService()
+
+	// Create action providers
+	scanEngine := tui.NewScanEngineImpl(scanService)
+	junkRunner := tui.NewJunkScanRunnerImpl(junkService, repos.JunkItems)
+	exclusionMgr := tui.NewExclusionManagerImpl(excludeService, repos.Exclusions)
+
 	providers := tui.NewTUIProviders(
 		repos.Projects, repos.Exclusions, repos.Events, repos.Rules,
 		repos.WatchRoots, repos.JunkCategories, repos.JunkItems,
+		scanEngine, junkRunner, exclusionMgr,
 	)
 
 	model := tui.NewMainModel(
 		providers.Daemon, providers.WatchRoots, providers.Projects,
 		providers.Exclusions, providers.Events, providers.Rules, providers.Junk,
+		providers.ScanEngine, providers.JunkScanRunner, providers.ExclusionManager,
 	)
 
 	p := tea.NewProgram(model, tea.WithAltScreen())

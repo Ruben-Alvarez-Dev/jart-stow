@@ -9,10 +9,10 @@ import (
 
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/domain"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/ports"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/screens"
 )
 
-// TUIProviders bundles all data providers for the TUI screens.
-// Each field implements one of the interfaces defined in internal/tui/screens.
+// TUIProviders bundles all data providers and action interfaces for the TUI screens.
 type TUIProviders struct {
 	Daemon     *DaemonProvider
 	WatchRoots *WatchRootsProvider
@@ -21,6 +21,11 @@ type TUIProviders struct {
 	Events     *EventsProvider
 	Rules      *RulesProvider
 	Junk       *JunkProvider
+
+	// Action interfaces
+	ScanEngine       screens.ScreenScanEngine
+	JunkScanRunner   screens.ScreenJunkScanRunner
+	ExclusionManager screens.ScreenExclusionManager
 }
 
 // NewTUIProviders creates all TUI data providers wired to real SQLite repositories.
@@ -32,6 +37,9 @@ func NewTUIProviders(
 	watchRootRepo ports.WatchRootRepository,
 	junkCategoryRepo ports.JunkCategoryRepository,
 	junkItemRepo ports.JunkItemRepository,
+	scanEngine screens.ScreenScanEngine,
+	junkScanRunner screens.ScreenJunkScanRunner,
+	exclusionManager screens.ScreenExclusionManager,
 ) *TUIProviders {
 	return &TUIProviders{
 		Daemon:     &DaemonProvider{},
@@ -44,6 +52,9 @@ func NewTUIProviders(
 			categoryRepo: junkCategoryRepo,
 			itemRepo:     junkItemRepo,
 		},
+		ScanEngine:       scanEngine,
+		JunkScanRunner:   junkScanRunner,
+		ExclusionManager: exclusionManager,
 	}
 }
 

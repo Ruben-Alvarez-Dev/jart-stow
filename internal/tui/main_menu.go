@@ -19,13 +19,13 @@ type menuItem struct {
 // mainMenuItems defines the decision tree from the main menu.
 func mainMenuItems(buildDashboard, buildScanner, buildExclusions, buildRules, buildAudit, buildHygiene, buildReport func() tea.Model) []menuItem {
 	return []menuItem{
-		{"🏠", "Dashboard",  "Overview: daemon, projects, space saved", buildDashboard},
-		{"📂", "Scanner",    "Scan projects for dev artifacts to exclude", buildScanner},
+		{"🏠", "Dashboard", "Overview: daemon, projects, space saved", buildDashboard},
+		{"📂", "Scanner", "Scan projects for dev artifacts to exclude", buildScanner},
 		{"🚫", "Exclusions", "View and manage backup exclusions", buildExclusions},
-		{"🧹", "Hygiene",    "Detect and review system junk for cleanup", buildHygiene},
-		{"📋", "Rules",      "Manage custom hygiene and exclusion rules", buildRules},
-		{"🔍", "Audit",      "Verify exclusion consistency and health", buildAudit},
-		{"📊", "Report",     "Generate hygiene and exclusion reports", buildReport},
+		{"🧹", "Hygiene", "Detect and review system junk for cleanup", buildHygiene},
+		{"📋", "Rules", "Manage custom hygiene and exclusion rules", buildRules},
+		{"🔍", "Audit", "Verify exclusion consistency and health", buildAudit},
+		{"📊", "Report", "Generate hygiene and exclusion reports", buildReport},
 	}
 }
 

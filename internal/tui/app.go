@@ -27,6 +27,7 @@ type MainModel struct {
 }
 
 // NewMainModel creates the TUI with the main menu as entry point.
+// Action interfaces may be nil for read-only mode.
 func NewMainModel(
 	daemon screens.DaemonStatusProvider,
 	watchRoots screens.WatchRootProvider,
@@ -35,6 +36,9 @@ func NewMainModel(
 	events screens.EventLister,
 	rules screens.RuleLister,
 	junk screens.JunkLister,
+	scanEngine screens.ScreenScanEngine,
+	junkRunner screens.ScreenJunkScanRunner,
+	exclusionMgr screens.ScreenExclusionManager,
 ) *MainModel {
 	t := theme.NewTheme()
 
@@ -42,10 +46,10 @@ func NewMainModel(
 		return screens.NewDashboardModel(t, daemon, watchRoots, projects, exclusions, events)
 	}
 	buildScanner := func() tea.Model {
-		return screens.NewScannerModel(t, watchRoots)
+		return screens.NewScannerModel(t, watchRoots, scanEngine)
 	}
 	buildExclusions := func() tea.Model {
-		return screens.NewExclusionsModel(t, exclusions)
+		return screens.NewExclusionsModel(t, exclusions, exclusionMgr)
 	}
 	buildRules := func() tea.Model {
 		return screens.NewRulesModel(t, rules)
@@ -54,7 +58,7 @@ func NewMainModel(
 		return screens.NewAuditModel(t, projects, exclusions)
 	}
 	buildHygiene := func() tea.Model {
-		return screens.NewHygieneModel(t, junk)
+		return screens.NewHygieneModel(t, junk, junkRunner)
 	}
 	buildReport := func() tea.Model {
 		return screens.NewReportModel(t, exclusions, events)
