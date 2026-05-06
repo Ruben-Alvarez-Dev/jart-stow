@@ -105,7 +105,10 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	// Clear the request immediately to prevent re-triggering.
+	// Save target before clearing (ClearNav sets navTarget to nil).
+	target := nav.NavTarget()
+
+	// Clear the request immediately to prevent re-triggering on next Update.
 	nav.ClearNav()
 	m.stack[len(m.stack)-1] = nav.(tea.Model)
 
@@ -114,17 +117,17 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.stack) > 1 {
 			m.stack = m.stack[:len(m.stack)-1]
 		}
-		target := m.stack[len(m.stack)-1]
-		target, _ = target.Update(m.sizeMsg())
-		m.stack[len(m.stack)-1] = target
-		return m, target.Init()
+		popped := m.stack[len(m.stack)-1]
+		popped, _ = popped.Update(m.sizeMsg())
+		m.stack[len(m.stack)-1] = popped
+		return m, popped.Init()
 
 	case "quit":
 		return m, tea.Quit
 
 	default:
 		// "forward" — push the target screen onto the stack.
-		if target := nav.NavTarget(); target != nil {
+		if target != nil {
 			target, _ = target.Update(m.sizeMsg())
 			m.stack = append(m.stack, target)
 			return m, target.Init()
