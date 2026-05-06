@@ -134,7 +134,7 @@ func (m *ExclusionsModel) loadData() {
 }
 
 func (m *ExclusionsModel) renderHeader() string {
-	title := m.theme.Header.Render("EXCLUSIONS")
+	title := m.theme.ScreenTitle.Render("EXCLUSIONS")
 	count := m.countExclusions()
 	subtitle := m.theme.Muted.Render(itoa(count) + " active")
 	return lipgloss.JoinHorizontal(lipgloss.Left, title, "  "+subtitle)
@@ -240,7 +240,7 @@ func (m *ExclusionsModel) renderTable() string {
 				}
 				rowStyle := lipgloss.NewStyle()
 				if i == m.cursor {
-					rowStyle = m.theme.Selected
+					rowStyle = m.theme.SelectedRow
 				}
 				row := lipgloss.JoinHorizontal(lipgloss.Left,
 					rowStyle.Width(4).Render(itoa(i+1)),
@@ -274,7 +274,7 @@ func (m *ExclusionsModel) renderDetailPanel() string {
 }
 
 func (m *ExclusionsModel) renderNavBar() string {
-	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  up/down Navigate  |  Enter: Select  |  R: Restore  |  F: Filter")
+	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render("← Esc:Back  q:Quit  ·  up/down Navigate  ·  Enter: Select  ·  R: Restore  ·  F: Filter")
 }
 
 // NavRequest returns the pending navigation request, or "" if none.

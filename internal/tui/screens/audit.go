@@ -112,7 +112,7 @@ func (m *AuditModel) loadData() {
 }
 
 func (m *AuditModel) renderHeader() string {
-	title := m.theme.Header.Render("AUDIT")
+	title := m.theme.ScreenTitle.Render("AUDIT")
 	return title
 }
 
@@ -205,7 +205,7 @@ func (m *AuditModel) renderSummaryBar() string {
 }
 
 func (m *AuditModel) renderNavBar() string {
-	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  up/down Navigate  |  Right Expand  |  Space: Inspect  |  A: Audit All")
+	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render("← Esc:Back  q:Quit  ·  up/down Navigate  ·  Right Expand  ·  Space: Inspect  ·  A: Audit All")
 }
 
 // NavRequest returns the pending navigation request, or "" if none.

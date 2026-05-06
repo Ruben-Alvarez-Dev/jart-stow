@@ -186,8 +186,8 @@ func (m *DashboardModel) refreshData() {
 }
 
 func (m *DashboardModel) renderHeader() string {
-	title := m.theme.Title.Render("JART-STOW")
-	subtitle := m.theme.Muted.Render("  Development Hygiene & Backup Exclusion Manager")
+	title := m.theme.ScreenTitle.Render("DASHBOARD")
+	subtitle := m.theme.Muted.Render("Development Hygiene & Backup Exclusion Manager")
 	return lipgloss.JoinVertical(lipgloss.Left,
 		title,
 		subtitle,
@@ -274,7 +274,7 @@ func (m *DashboardModel) renderActivitySection() string {
 }
 
 func (m *DashboardModel) renderNavBar() string {
-	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  1-7 Screens  |  ? Help")
+	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render("← Esc:Back  ·  q:Quit")
 }
 
 // NavRequest returns the pending navigation request, or "" if none.

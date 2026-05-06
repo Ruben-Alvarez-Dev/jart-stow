@@ -109,7 +109,7 @@ func (m *RulesModel) loadData() {
 }
 
 func (m *RulesModel) renderHeader() string {
-	title := m.theme.Header.Render("RULES")
+	title := m.theme.ScreenTitle.Render("RULES")
 	count := m.countRules()
 	subtitle := m.theme.Muted.Render(itoa(count) + " active")
 	return lipgloss.JoinHorizontal(lipgloss.Left, title, "  "+subtitle)
@@ -146,7 +146,7 @@ func (m *RulesModel) renderGlobalSection() string {
 			for i, rule := range rules {
 				rowStyle := lipgloss.NewStyle()
 				if m.focus == 0 && i == m.cursor {
-					rowStyle = m.theme.Selected
+					rowStyle = m.theme.SelectedRow
 				}
 				enabledStr := "x"
 				if !rule.Enabled {
@@ -200,7 +200,7 @@ func (m *RulesModel) renderProjectSection() string {
 			for i, rule := range rules {
 				rowStyle := lipgloss.NewStyle()
 				if m.focus == 1 && i == m.cursor {
-					rowStyle = m.theme.Selected
+					rowStyle = m.theme.SelectedRow
 				}
 				projectID := "-"
 				if rule.ProjectID != nil {
@@ -234,7 +234,7 @@ func (m *RulesModel) renderProjectSection() string {
 }
 
 func (m *RulesModel) renderNavBar() string {
-	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  A: Add Rule  |  E: Edit  |  D: Delete  |  up/down: Navigate")
+	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render("← Esc:Back  q:Quit  ·  A: Add Rule  ·  E: Edit  ·  D: Delete  ·  up/down: Navigate")
 }
 
 // NavRequest returns the pending navigation request, or "" if none.

@@ -27,17 +27,26 @@ type Theme struct {
 	Muted     lipgloss.Style
 	Highlight lipgloss.Style
 
-	Title    lipgloss.Style
-	Subtitle lipgloss.Style
-	Header   lipgloss.Style
+	// Section styles
+	Title       lipgloss.Style
+	Subtitle    lipgloss.Style
+	Header      lipgloss.Style
+	ScreenTitle lipgloss.Style
 
 	StatusRunning lipgloss.Style
 	StatusStopped lipgloss.Style
 
+	// Card styles for content panels
 	CardBorder lipgloss.Style
 	CardTitle  lipgloss.Style
 
-	Selected  lipgloss.Style
+	// Selection styles with background highlight
+	Selected         lipgloss.Style
+	SelectedRow      lipgloss.Style
+	SelectedItem     lipgloss.Style
+	SelectedCard     lipgloss.Style
+
+	// Navigation and info
 	NavBar    lipgloss.Style
 	HelpText  lipgloss.Style
 	ErrorText lipgloss.Style
@@ -97,6 +106,33 @@ func NewTheme() *Theme {
 	t.Selected = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(ColorHighlight)
+
+	// SelectedRow: background highlight for list/table rows
+	t.SelectedRow = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		Background(lipgloss.Color("235"))
+
+	// SelectedItem: inverted colors for active menu item
+	t.SelectedItem = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("15")).
+		Background(ColorPrimary)
+
+	// SelectedCard: bordered card for focused panel
+	t.SelectedCard = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(1, 2)
+
+	// Screen title: bold, primary, with underline
+	t.ScreenTitle = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		BorderForeground(ColorMuted).
+		Padding(0, 2).
+		MarginBottom(1)
 
 	// Global navigation bar
 	t.NavBar = lipgloss.NewStyle().

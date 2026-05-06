@@ -97,7 +97,7 @@ func (m *ReportModel) loadData() {
 }
 
 func (m *ReportModel) renderHeader() string {
-	title := m.theme.Header.Render("REPORT")
+	title := m.theme.ScreenTitle.Render("REPORT")
 	return title
 }
 
@@ -299,7 +299,7 @@ func (m *ReportModel) renderDaemonSection() string {
 }
 
 func (m *ReportModel) renderNavBar() string {
-	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  1-7 Screens  |  E: Export")
+	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render("← Esc:Back  q:Quit  ·  1-7 Screens  ·  E: Export")
 }
 
 // NavRequest returns the pending navigation request, or "" if none.

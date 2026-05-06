@@ -144,7 +144,7 @@ func (m *HygieneModel) loadItems() {
 }
 
 func (m *HygieneModel) renderHeader() string {
-	title := m.theme.Header.Render("HYGIENE")
+	title := m.theme.ScreenTitle.Render("HYGIENE")
 	var pendingCount int
 	if m.junk != nil {
 		count, err := m.junk.CountPendingItems()
@@ -179,7 +179,7 @@ func (m *HygieneModel) renderCategoriesSidebar(width int) string {
 			}
 			rowStyle := lipgloss.NewStyle()
 			if m.focus == 0 && i == m.cursor {
-				rowStyle = m.theme.Selected
+				rowStyle = m.theme.SelectedRow
 			}
 			scannerIcon := scannerEmoji(cat.Scanner)
 			line := rowStyle.Render(scannerIcon + " " + theme.Truncate(cat.Name, width-12) + " " + itoa(count))
@@ -209,7 +209,7 @@ func (m *HygieneModel) renderItemsPanel(width int) string {
 		for i, item := range m.items {
 			rowStyle := lipgloss.NewStyle()
 			if m.focus == 1 && i == m.cursor {
-				rowStyle = m.theme.Selected
+				rowStyle = m.theme.SelectedRow
 			}
 			check := "[ ]"
 			if item.IsApproved() {
@@ -277,7 +277,7 @@ func (m *HygieneModel) renderDetailPanel() string {
 }
 
 func (m *HygieneModel) renderNavBar() string {
-	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  up/down Navigate  |  Space: Toggle  |  A: Approve  |  S: Skip  |  C: Clean All")
+	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render("← Esc:Back  q:Quit  ·  up/down Navigate  ·  Space: Toggle  ·  A: Approve  ·  S: Skip  ·  C: Clean All")
 }
 
 // NavRequest returns the pending navigation request, or "" if none.

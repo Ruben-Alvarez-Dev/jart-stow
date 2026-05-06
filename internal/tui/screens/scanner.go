@@ -98,7 +98,7 @@ func (m *ScannerModel) View() string {
 }
 
 func (m *ScannerModel) renderHeader() string {
-	title := m.theme.Header.Render("SCANNER")
+	title := m.theme.ScreenTitle.Render("SCANNER")
 	return title
 }
 
@@ -178,7 +178,7 @@ func (m *ScannerModel) renderLogPanel() string {
 }
 
 func (m *ScannerModel) renderNavBar() string {
-	return m.theme.HelpText.Render("← Esc:Back  q:Quit  |  Space: Toggle  |  Enter: Scan  |  Tab: Switch panels")
+	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render("← Esc:Back  q:Quit  ·  Space: Toggle  ·  Enter: Scan  ·  Tab: Switch panels")
 }
 
 // NavRequest returns the pending navigation request, or "" if none.

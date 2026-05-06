@@ -19,13 +19,13 @@ type menuItem struct {
 // mainMenuItems defines the decision tree from the main menu.
 func mainMenuItems(buildDashboard, buildScanner, buildExclusions, buildRules, buildAudit, buildHygiene, buildReport func() tea.Model) []menuItem {
 	return []menuItem{
-		{"🏠", "Dashboard", "Overview: daemon, projects, space saved", buildDashboard},
-		{"📂", "Scanner", "Scan projects for dev artifacts to exclude", buildScanner},
+		{"🏠", "Dashboard",  "Overview: daemon, projects, space saved", buildDashboard},
+		{"📂", "Scanner",    "Scan projects for dev artifacts to exclude", buildScanner},
 		{"🚫", "Exclusions", "View and manage backup exclusions", buildExclusions},
-		{"🧹", "Hygiene", "Detect and review system junk for cleanup", buildHygiene},
-		{"📋", "Rules", "Manage custom hygiene and exclusion rules", buildRules},
-		{"🔍", "Audit", "Verify exclusion consistency and health", buildAudit},
-		{"📊", "Report", "Generate hygiene and exclusion reports", buildReport},
+		{"🧹", "Hygiene",    "Detect and review system junk for cleanup", buildHygiene},
+		{"📋", "Rules",      "Manage custom hygiene and exclusion rules", buildRules},
+		{"🔍", "Audit",      "Verify exclusion consistency and health", buildAudit},
+		{"📊", "Report",     "Generate hygiene and exclusion reports", buildReport},
 	}
 }
 
@@ -104,9 +104,9 @@ func (m *MainMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleMouseClick maps a click coordinate to a menu item.
 func (m *MainMenuModel) handleMouseClick(x, y int) {
-	// Menu items start after header (5 lines) and title area (2 lines)
-	startY := 7
-	itemHeight := 3 // each item: title + desc + spacing
+	// Menu items start after header (approx 5 lines for header + spacing)
+	startY := 6
+	itemHeight := 4 // card: border top + title + desc + border bottom
 	for i := range m.items {
 		itemTop := startY + i*itemHeight
 		itemBot := itemTop + itemHeight
@@ -124,31 +124,34 @@ func (m *MainMenuModel) NavRequest() string   { return m.navRequest }
 func (m *MainMenuModel) NavTarget() tea.Model { return m.navTarget }
 func (m *MainMenuModel) ClearNav()            { m.navRequest = ""; m.navTarget = nil }
 
-// View renders the main menu.
+// View renders the main menu with a professional card-based layout.
 func (m *MainMenuModel) View() string {
 	if m.width == 0 {
 		return "Loading..."
 	}
 
-	// Header
+	minWidth := 50
+	if m.width < minWidth {
+		return "Terminal too narrow (" + itoa(m.width) + " < " + itoa(minWidth) + ")"
+	}
+
 	header := m.renderHeader()
 
-	// Menu items
-	var itemViews []string
+	// Render menu item cards
+	var items []string
 	for i, item := range m.items {
-		itemViews = append(itemViews, m.renderItem(i, item))
+		items = append(items, m.renderItem(i, item))
 	}
-	menuArea := lipgloss.JoinVertical(lipgloss.Left, itemViews...)
+	menuArea := lipgloss.JoinVertical(lipgloss.Left, items...)
 
-	// Fill remaining space
-	remainingHeight := m.height - lipgloss.Height(header) - lipgloss.Height(menuArea) - 3
+	// Spacer to push footer to bottom
+	footer := m.renderFooter()
+	usedHeight := lipgloss.Height(header) + lipgloss.Height(menuArea) + lipgloss.Height(footer)
+	remainingHeight := m.height - usedHeight
 	var spacer string
 	if remainingHeight > 0 {
 		spacer = lipgloss.NewStyle().Height(remainingHeight).Render("")
 	}
-
-	// Footer with controls
-	footer := m.renderFooter()
 
 	return lipgloss.JoinVertical(lipgloss.Top,
 		header,
@@ -159,42 +162,125 @@ func (m *MainMenuModel) View() string {
 }
 
 func (m *MainMenuModel) renderHeader() string {
-	title := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(theme.ColorPrimary).
-		Padding(0, 2).
-		Render("JART-STOW")
-	subtitle := m.theme.Muted.Render("macOS development hygiene & backup exclusion manager")
+	title := m.theme.Title.Padding(0, 3).Render("JART-STOW")
 
-	header := lipgloss.JoinVertical(lipgloss.Center, title, subtitle)
-	return m.theme.NavBar.Width(m.width).Render(header) + "\n"
+	divider := lipgloss.NewStyle().
+		Foreground(theme.ColorMuted).
+		Width(m.width).
+		Render(repeatStr("─", m.width))
+
+	subtitle := m.theme.Muted.
+		Padding(0, 0).
+		Width(m.width).
+		Render(lipgloss.PlaceHorizontal(m.width, lipgloss.Center, "macOS development hygiene & backup exclusion manager"))
+
+	return lipgloss.JoinVertical(lipgloss.Center,
+		title,
+		divider,
+		subtitle,
+		"",
+	)
 }
 
 func (m *MainMenuModel) renderItem(i int, item menuItem) string {
-	const itemWidth = 60
+	selected := i == m.cursor
 
-	isSelected := i == m.cursor
-
-	icon := item.icon + " "
-	title := item.title
-	desc := "  " + item.desc
-
-	var line1, line2 string
-	if isSelected {
-		cursor := m.theme.Highlight.Render("▸")
-		line1 = cursor + " " + m.theme.Selected.Render(icon+title)
-		line2 = m.theme.Selected.Render(desc)
-	} else {
-		line1 = "  " + m.theme.Primary.Render(icon) + m.theme.Primary.Render(title)
-		line2 = m.theme.Muted.Render(desc)
+	// Determine card width: min(68, width-4)
+	cardW := m.width - 4
+	if cardW > 68 {
+		cardW = 68
 	}
 
-	itemContent := lipgloss.JoinVertical(lipgloss.Left, line1, line2)
-	box := lipgloss.NewStyle().Padding(0, 4).Width(itemWidth).Render(itemContent)
-	return box
+	// Icon + title line
+	iconStyled := m.theme.Primary.Render(item.icon)
+	titleText := item.title
+	descText := item.desc
+
+	var titleLine, descLine string
+	innerW := cardW - 4 // inside borders
+
+	if selected {
+		// Selected: highlighted background with ♢ marker, bold title
+		titleLine = m.theme.SelectedItem.
+			Width(innerW).
+			Render(" ▸ " + iconStyled + "  " + titleText)
+		descLine = m.theme.SelectedItem.
+			Width(innerW).
+			Render("    " + descText)
+	} else {
+		// Normal: cyan title on dark background, muted description
+		normalTitle := lipgloss.NewStyle().
+			Foreground(theme.ColorPrimary).
+			Bold(true)
+
+		titleLine = lipgloss.NewStyle().
+			Width(innerW).
+			Render("   " + iconStyled + "  " + normalTitle.Render(titleText))
+		descLine = m.theme.Muted.
+			Width(innerW).
+			Render("    " + descText)
+	}
+
+	inner := lipgloss.JoinVertical(lipgloss.Left, titleLine, descLine)
+
+	// Card border: highlighted cyan border for selected, muted for others
+	var cardStyle lipgloss.Style
+	if selected {
+		cardStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(theme.ColorPrimary).
+			Padding(0, 1).
+			Width(cardW)
+	} else {
+		cardStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(theme.ColorMuted).
+			Padding(0, 1).
+			Width(cardW)
+	}
+
+	// Center the card horizontally
+	return lipgloss.NewStyle().Width(m.width).Render(
+		lipgloss.PlaceHorizontal(m.width, lipgloss.Center, cardStyle.Render(inner)),
+	)
 }
 
 func (m *MainMenuModel) renderFooter() string {
-	hint := m.theme.HelpText.Render("↑↓ select  ↵ enter  q quit  mouse click")
-	return m.theme.NavBar.Width(m.width).Render(hint)
+	hint := m.theme.HelpText.Render("↑↓ select  ·  ↵ enter  ·  1-7 quick  ·  q quit  ·  click")
+	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render(hint)
+}
+
+// repeatStr creates a string of repeated characters.
+func repeatStr(s string, count int) string {
+	if count <= 0 {
+		return ""
+	}
+	result := ""
+	for i := 0; i < count; i++ {
+		result += s
+	}
+	return result
+}
+
+// itoa converts int to string without importing fmt.
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
 }
