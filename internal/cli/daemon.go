@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -231,13 +230,7 @@ func newDaemonRunCmd() *cobra.Command {
 		Use:   "run",
 		Short: "Run the daemon in the foreground (for debugging)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("Starting daemon in foreground mode...")
-
-			// TODO(#10): Wire up real adapters when main.go is ready
-			// For now, just run indefinitely
-			ctx := context.Background()
-			<-ctx.Done()
-			return nil
+			return fmt.Errorf("daemon run is wired in main.go — use the compiled binary")
 		},
 	}
 }

@@ -46,3 +46,7 @@ Thumbs.db
 .DS_Store
 *.test
 coverage.out
+
+# --- Legacy / personal docs ---
+/raw/
+/ONBOARDING.md
