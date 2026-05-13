@@ -39,6 +39,7 @@ func NewMainModel(
 	scanEngine screens.ScreenScanEngine,
 	junkRunner screens.ScreenJunkScanRunner,
 	exclusionMgr screens.ScreenExclusionManager,
+	quickExclude screens.ScreenQuickExclude,
 ) *MainModel {
 	t := theme.NewTheme()
 
@@ -46,7 +47,7 @@ func NewMainModel(
 		return screens.NewDashboardModel(t, daemon, watchRoots, projects, exclusions, events)
 	}
 	buildScanner := func() tea.Model {
-		return screens.NewScannerModel(t, watchRoots, scanEngine)
+		return screens.NewScannerModel(t, watchRoots, scanEngine, quickExclude)
 	}
 	buildExclusions := func() tea.Model {
 		return screens.NewExclusionsModel(t, exclusions, exclusionMgr)

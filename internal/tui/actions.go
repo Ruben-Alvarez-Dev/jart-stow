@@ -216,6 +216,60 @@ func (m *ExclusionManagerImpl) RemoveExclusion(exclusionID int64) error {
 }
 
 // ============================================================================
+// QuickExcludeImpl
+// ============================================================================
+
+// QuickExcludeImpl implements screens.ScreenQuickExclude using the
+// QuickExcludeService. This provides the direct scan-and-exclude flow
+// that EXCLUSION-SCRIPT had, without needing projects in the database.
+type QuickExcludeImpl struct {
+	quickService *services.QuickExcludeService
+}
+
+// NewQuickExcludeImpl creates a QuickExcludeImpl.
+func NewQuickExcludeImpl(qs *services.QuickExcludeService) *QuickExcludeImpl {
+	return &QuickExcludeImpl{quickService: qs}
+}
+
+// ScanPath scans a path for development artifacts.
+func (q *QuickExcludeImpl) ScanPath(path string) ([]screens.QuickScanResult, error) {
+	results, err := q.quickService.Scan(ctx(), path)
+	if err != nil {
+		return nil, err
+	}
+	converted := make([]screens.QuickScanResult, len(results))
+	for i, r := range results {
+		converted[i] = screens.QuickScanResult{
+			Path:        r.Path,
+			PatternName: r.PatternName,
+			SizeBytes:   r.SizeBytes,
+			AlreadyDone: r.AlreadyDone,
+		}
+	}
+	return converted, nil
+}
+
+// ExcludePaths applies exclusions to all configured backup systems.
+func (q *QuickExcludeImpl) ExcludePaths(paths []string) map[string]error {
+	return q.quickService.ExcludePaths(ctx(), paths)
+}
+
+// RemoveExclusions removes exclusions from all configured backup systems.
+func (q *QuickExcludeImpl) RemoveExclusions(paths []string) map[string]error {
+	return q.quickService.RemoveExclusions(ctx(), paths)
+}
+
+// ListExclusions returns all currently excluded paths per backup system.
+func (q *QuickExcludeImpl) ListExclusions() (map[string][]string, error) {
+	return q.quickService.ListExclusions(ctx())
+}
+
+// GetVolumes returns available volumes (Home + mounted drives).
+func (q *QuickExcludeImpl) GetVolumes() []domain.Volume {
+	return services.GetVolumes()
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 

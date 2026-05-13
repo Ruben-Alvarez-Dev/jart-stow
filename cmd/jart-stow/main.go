@@ -34,7 +34,20 @@ func getDBPath() string {
 }
 
 func main() {
-	cmd := cli.NewRootCommand()
+	// Create the backup providers
+	backups := []ports.BackupProvider{
+		tmutil.NewAdapter(""),
+		ccc.NewAdapter(""),
+	}
+
+	// Create the scan service
+	scanService := services.NewScanService(0, nil)
+
+	// Create the quick exclude service (no DB needed)
+	quickExcludeSvc := services.NewQuickExcludeService(scanService, backups...)
+
+	// Create root command with quick exclude wired up
+	cmd := cli.NewRootCommand(quickExcludeSvc)
 
 	// Wire up the TUI subcommand
 	cmd.AddCommand(cli.NewTUICommand(runTUI))
@@ -84,6 +97,8 @@ func runTUI(_ *cobra.Command, _ []string) error {
 	excludeService := services.NewExcludeService(
 		repos.Projects, repos.Exclusions, scanService, backups...,
 	)
+	quickExcludeSvc := services.NewQuickExcludeService(scanService, backups...)
+	quickExcludeImpl := tui.NewQuickExcludeImpl(quickExcludeSvc)
 	junkService := createJunkScanService()
 
 	// Create action providers
@@ -94,13 +109,14 @@ func runTUI(_ *cobra.Command, _ []string) error {
 	providers := tui.NewTUIProviders(
 		repos.Projects, repos.Exclusions, repos.Events, repos.Rules,
 		repos.WatchRoots, repos.JunkCategories, repos.JunkItems,
-		scanEngine, junkRunner, exclusionMgr,
+		scanEngine, junkRunner, exclusionMgr, quickExcludeImpl,
 	)
 
 	model := tui.NewMainModel(
 		providers.Daemon, providers.WatchRoots, providers.Projects,
 		providers.Exclusions, providers.Events, providers.Rules, providers.Junk,
 		providers.ScanEngine, providers.JunkScanRunner, providers.ExclusionManager,
+		providers.QuickExclude,
 	)
 
 	p := tea.NewProgram(model, tea.WithAltScreen())

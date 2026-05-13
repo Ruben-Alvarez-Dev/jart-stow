@@ -26,6 +26,7 @@ type TUIProviders struct {
 	ScanEngine       screens.ScreenScanEngine
 	JunkScanRunner   screens.ScreenJunkScanRunner
 	ExclusionManager screens.ScreenExclusionManager
+	QuickExclude     screens.ScreenQuickExclude
 }
 
 // NewTUIProviders creates all TUI data providers wired to real SQLite repositories.
@@ -40,6 +41,7 @@ func NewTUIProviders(
 	scanEngine screens.ScreenScanEngine,
 	junkScanRunner screens.ScreenJunkScanRunner,
 	exclusionManager screens.ScreenExclusionManager,
+	quickExclude screens.ScreenQuickExclude,
 ) *TUIProviders {
 	return &TUIProviders{
 		Daemon:     &DaemonProvider{},
@@ -55,6 +57,7 @@ func NewTUIProviders(
 		ScanEngine:       scanEngine,
 		JunkScanRunner:   junkScanRunner,
 		ExclusionManager: exclusionManager,
+		QuickExclude:     quickExclude,
 	}
 }
 
