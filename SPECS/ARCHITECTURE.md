@@ -15,7 +15,7 @@ Jart-Stow is a macOS-native development hygiene and backup exclusion manager. It
 
 2. **System Hygiene:** detects and presents system junk for review — unused Docker resources, stale APFS snapshots, system caches, temporary files — and allows granular, user-verified cleanup across all connected volumes.
 
-A **Python Textual TUI** (primary) and a **Go Bubble Tea TUI** (fallback) provide interactive terminal management. A FastAPI 3.0 REST API serves as the backend for the Textual TUI and external consumers.
+A **Python Textual TUI** provides the interactive terminal interface. A FastAPI 3.0 REST API serves as the backend for the TUI and external consumers. A Go CLI provides system-level operations (daemon, scan, exclude) without requiring the API.
 
 ---
 
@@ -25,34 +25,32 @@ A **Python Textual TUI** (primary) and a **Go Bubble Tea TUI** (fallback) provid
 
 **Context:** The system requires a low-level macOS daemon (FSEvents, launchd, tmutil), a professional TUI, and a standards-compliant REST API with OpenAPI 3.0 documentation.
 
-**Decision:** Adopt a **Hybrid Architecture** with two runtimes and two TUIs (see ADR-009):
+**Decision:** Adopt a **Hybrid Architecture** with a single Python/Textual TUI and a Go CLI/Daemon (see ADR-009):
 
 ```
 ┌─────────────────────────────────────────────┐
-│        Python Stack (primary TUI)            │
+│        Python Stack (TUI + API)              │
 │  Textual TUI → HTTP → FastAPI → SQLite      │
 └─────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────┐
-│        Go Stack (fallback + daemon)          │
-│  CLI/Bubble Tea TUI → SQLite (direct)        │
+│        Go Stack (CLI + Daemon)               │
+│  CLI → SQLite (direct)                       │
 │  Daemon (FSEvents) → SQLite (direct)         │
 └─────────────────────────────────────────────┘
 ```
 
 **Rationale:**
 - Go provides zero-dependency binaries, native FSEvents support, and efficient CLI handling.
-- Python/FastAPI provides the richest OpenAPI ecosystem, automatic interactive docs, and rapid API development.
-- Textual (Python) provides CSS-based layout and reactive widgets, reducing UI code vs manual lipgloss.
+- Python/FastAPI + Textual provides the richest OpenAPI ecosystem and the most productive TUI framework (CSS layout, reactive widgets).
 - SQLite as the shared state layer avoids IPC complexity (no gRPC, no message queue).
 
 **Consequences:**
 - Two runtimes to build and package.
 - SQLite must be accessed with WAL mode to allow concurrent reads from both processes.
-- Deployment must ensure both binaries are installed together.
-- Two TUIs to maintain: Python Textual (primary) and Go Bubble Tea (fallback).
 - The Textual TUI requires the FastAPI server to be running.
+- The Go CLI works without the API for read-only and system operations.
 
-See [ADR-009: Python Textual TUI as Primary Interactive Interface](../docs/architecture/decisions/adr-009-python-textual-tui-primary.md).
+See [ADR-009: Python Textual TUI as the Sole Interactive Interface](../docs/architecture/decisions/adr-009-python-textual-tui-primary.md).
 
 ---
 
@@ -60,6 +58,7 @@ See [ADR-009: Python Textual TUI as Primary Interactive Interface](../docs/archi
 
 The system follows **Hexagonal (Ports & Adapters)** architecture, with domain logic isolated from infrastructure concerns.
 
+```
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                      PRIMARY ACTORS                           │
@@ -88,22 +87,20 @@ The system follows **Hexagonal (Ports & Adapters)** architecture, with domain lo
 │       │              ┌────────▼────────┐            │        │
 │       │              │   SQLite DB     │            │        │
 │       │              │  (WAL mode)     │◄───────────┘        │
-│       │              └────────┬────────┘                     │
-│       │                       │                              │
-│       │              ┌────────▼────────┐                     │
-│       │              │  Go Stack       │                     │
-│       │              │  (CLI, Bubble   │                     │
-│       │              │   Tea TUI,      │                     │
-│       │              │   Daemon)       │                     │
-│       │              │  ┌───────────┐  │                     │
-│       │              │  │ Domain    │  │                     │
-│       │              │  │ Ports     │  │                     │
-│       │              │  │ Adapters  │  │                     │
-│       │              │  │ (tmutil,  │  │                     │
-│       │              │  │  CCC,     │  │                     │
-│       │              │  │  FSEvents)│  │                     │
-│       │              │  └───────────┘  │                     │
-│       │              └─────────────────┘                     │
+│       │              └────┬───────────┘                     │
+│       │                   │                                 │
+│       │          ┌────────▼────────┐                        │
+│       │          │  Go Stack       │                        │
+│       │          │  (CLI + Daemon) │                        │
+│       │          │  ┌───────────┐  │                        │
+│       │          │  │ Domain    │  │                        │
+│       │          │  │ Ports     │  │                        │
+│       │          │  │ Adapters  │  │                        │
+│       │          │  │ (tmutil,  │  │                        │
+│       │          │  │  CCC,     │  │                        │
+│       │          │  │  FSEvents)│  │                        │
+│       │          │  └───────────┘  │                        │
+│       │          └─────────────────┘                        │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -146,16 +143,6 @@ FSEvents → Daemon detects new folder in /Code
          → DaemonEventRepository.Log(event)
 ```
 
-### TUI Status Query Flow (Bubble Tea — direct DB access)
-
-```
-User presses "s" in Go TUI
-         → StatusScreen loads
-         → ProjectRepository.FindAll()
-         → ExclusionRepository.FindByProject(projectID)
-         → TUI renders tree + stats
-```
-
 ### TUI Status Query Flow (Textual — via REST API)
 
 ```
@@ -178,22 +165,19 @@ GET /api/v1/projects
 
 ---
 
-## 6a. TUI Comparison
+## 6a. TUI Architecture
 
-| Aspect | Python TUI (Textual) | Go TUI (Bubble Tea) |
-|---|---|---|
-| **Location** | `api/tui/` | `internal/tui/` |
-| **Backend** | REST API (HTTP) | SQLite (direct) |
-| **Dependencies** | Requires Python + API server | Self-contained binary |
-| **Layout** | CSS-based (TCSS) | Lipgloss (programmatic) |
-| **Widgets** | Built-in DataTable, Tree, Input, etc. | Bubbles components |
-| **State** | Reactive via Textual | Manual tea.Model |
-| **Primary use** | Full-featured daily use | Quick operations, CI, fallback |
-| **Startup** | `jart-stow api &` then `jart-stow tui` | `jart-stow tui` |
+The Python Textual TUI provides all interactive functionality. See [ADR-009](../docs/architecture/decisions/adr-009-python-textual-tui-primary.md).
 
-Both TUIs share the same 7-screen structure: Dashboard, Scanner, Exclusions, Rules, Audit, Hygiene, Report.
-
-See [ADR-009](../docs/architecture/decisions/adr-009-python-textual-tui-primary.md) for the full rationale.
+| Aspect | Detail |
+|---|---|
+| **Framework** | Textual (Python) |
+| **Location** | `api/tui/` |
+| **Backend** | REST API (HTTP to FastAPI) |
+| **Screens** | 6: Dashboard, Exclusions, Hygiene, Rules, Audit, Report |
+| **Layout** | CSS-based (TCSS stylesheet) |
+| **State** | Reactive via Textual watch system |
+| **Startup** | Start FastAPI, then `python -m api.tui.app` |
 
 ## 6. Directory Structure
 
@@ -223,28 +207,9 @@ jart-stow/
 │   │   ├── root.go
 │   │   ├── daemon.go
 │   │   ├── scan.go
-│   │   ├── status.go
-│   │   ├── inspect.go
-│   │   ├── audit.go
-│   │   ├── rule.go
-│   │   └── report.go
-│   ├── tui/                         # Bubble Tea interface
-│   │   ├── app.go                   # Main TUI model
-│   │   ├── screens/
-│   │   │   ├── dashboard.go
-│   │   │   ├── scanner.go
-│   │   │   ├── exclusions.go
-│   │   │   ├── rules.go
-│   │   │   ├── audit.go
-│   │   │   └── report.go
-│   │   ├── components/
-│   │   │   ├── tree.go
-│   │   │   ├── table.go
-│   │   │   ├── gauge.go
-│   │   │   ├── log.go
-│   │   │   └── spinner.go
-│   │   └── theme/
-│   │       └── style.go             # Lipgloss theme
+│   │   ├── commands.go              # inspect, audit, rule, report
+│   │   ├── exclude.go               # Scan/exclude workflow
+│   │   └── pager.go                 # less-based output paging
 │   └── adapters/                    # Infrastructure
 │       ├── sqlite/
 │       │   ├── project_repo.go

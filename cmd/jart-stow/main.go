@@ -19,9 +19,7 @@ import (
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/cli"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/ports"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/services"
-	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -77,7 +75,6 @@ func main() {
 			EventRepo:     repos.Events,
 		}
 
-		// Override daemon run with real wiring
 		_ = excludeService
 		_ = junkService
 	} else {
@@ -89,11 +86,6 @@ func main() {
 
 	// Create root command
 	cmd := cli.NewRootCommand(deps)
-
-	// Wire up the TUI subcommand (needs its own DB connection for the TUI lifecycle)
-	cmd.AddCommand(cli.NewTUICommand(func(cobraCmd *cobra.Command, args []string) error {
-		return runTUI(cobraCmd, args)
-	}))
 
 	// Override daemon run with real wiring
 	if daemonCmd := findCobraSubcommand(cmd, "daemon"); daemonCmd != nil {
@@ -115,58 +107,6 @@ func findCobraSubcommand(parent *cobra.Command, name string) *cobra.Command {
 		if c.Name() == name {
 			return c
 		}
-	}
-	return nil
-}
-
-// runTUI starts the Bubble Tea TUI with real data providers and action services wired to SQLite.
-func runTUI(_ *cobra.Command, _ []string) error {
-	dbPath := getDBPath()
-	ctx := context.Background()
-
-	conn, err := sqlite.NewConnection(ctx, dbPath)
-	if err != nil {
-		return fmt.Errorf("opening database: %w", err)
-	}
-	defer conn.Close()
-
-	repos := sqlite.NewRepositorySet(conn)
-
-	// Create real services for interactive functionality
-	scanService := services.NewScanService(0, nil)
-
-	backups := []ports.BackupProvider{
-		tmutil.NewAdapter(""),
-		ccc.NewAdapter(""),
-	}
-	excludeService := services.NewExcludeService(
-		repos.Projects, repos.Exclusions, scanService, backups...,
-	)
-	quickExcludeSvc := services.NewQuickExcludeService(scanService, backups...)
-	quickExcludeImpl := tui.NewQuickExcludeImpl(quickExcludeSvc)
-	junkService := createJunkScanService()
-
-	// Create action providers
-	scanEngine := tui.NewScanEngineImpl(scanService)
-	junkRunner := tui.NewJunkScanRunnerImpl(junkService, repos.JunkItems)
-	exclusionMgr := tui.NewExclusionManagerImpl(excludeService, repos.Exclusions)
-
-	providers := tui.NewTUIProviders(
-		repos.Projects, repos.Exclusions, repos.Events, repos.Rules,
-		repos.WatchRoots, repos.JunkCategories, repos.JunkItems,
-		scanEngine, junkRunner, exclusionMgr, quickExcludeImpl,
-	)
-
-	model := tui.NewMainModel(
-		providers.Daemon, providers.WatchRoots, providers.Projects,
-		providers.Exclusions, providers.Events, providers.Rules, providers.Junk,
-		providers.ScanEngine, providers.JunkScanRunner, providers.ExclusionManager,
-		providers.QuickExclude,
-	)
-
-	p := tea.NewProgram(model, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("running TUI: %w", err)
 	}
 	return nil
 }

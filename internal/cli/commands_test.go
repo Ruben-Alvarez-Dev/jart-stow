@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/domain"
@@ -164,22 +163,6 @@ func TestRuleCommand_NotRegistered(t *testing.T) {
 	_, err := executeCommand(cmd, "rule")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown command")
-}
-
-func TestNewTUICommand(t *testing.T) {
-	called := false
-	runner := func(cmd *cobra.Command, args []string) error {
-		called = true
-		return nil
-	}
-	cmd := NewTUICommand(runner)
-	require.Equal(t, "tui", cmd.Use)
-	require.Equal(t, "Launch the terminal user interface", cmd.Short)
-
-	out, err := executeCommand(cmd)
-	assert.NoError(t, err)
-	assert.True(t, called, "runner should have been called")
-	assert.Empty(t, strings.TrimSpace(out), "no output expected from stub runner")
 }
 
 func TestDaemonCommand_Structure(t *testing.T) {

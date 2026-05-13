@@ -42,9 +42,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Makefile with build, test, lint, docs, api, and tui targets
 
 ### Changed
-- Architecture evolved from single Go TUI to dual-TUI (Python Textual primary, Go Bubble Tea fallback)
+- Architecture evolved from Go Bubble Tea TUI to single Python Textual TUI
+- All interactive UI is now in Python/Textual, communicating via REST API
+- Go binary is CLI + Daemon only (no TUI, no Bubble Tea, no lipgloss)
+- Go module dependencies reduced (bubbletea, lipgloss, bubbles removed)
 - All CLI commands updated to use CLIDependencies struct for constructor injection
-- TUI screens refactored from raw lipgloss to viewport-safe components.Screen
+
+### Removed
+- Go Bubble Tea TUI entirely (`internal/tui/`, `internal/cli/tui.go`)
+- Bubble Tea, Lipgloss, and Bubbles dependencies from go.mod
 
 ### Fixed
 - `__pycache__` files removed from version control
