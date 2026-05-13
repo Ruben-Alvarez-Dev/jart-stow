@@ -4,11 +4,12 @@ package cli
 import (
 	"fmt"
 
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/services"
 	"github.com/spf13/cobra"
 )
 
 // NewRootCommand creates the root Cobra command for jart-stow.
-func NewRootCommand() *cobra.Command {
+func NewRootCommand(qs *services.QuickExcludeService) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "jart-stow",
 		Short: "macOS development hygiene & backup exclusion manager",
@@ -31,13 +32,14 @@ for user-reviewed cleanup.`,
 	cmd.AddCommand(newAuditCommand())
 	cmd.AddCommand(newRuleCommand())
 	cmd.AddCommand(newReportCommand())
+	cmd.AddCommand(NewExcludeCommand(qs))
 
 	return cmd
 }
 
-// Execute runs the root command and exits on error.
-func Execute() error {
-	cmd := NewRootCommand()
+// Execute runs the root command with the given QuickExcludeService and exits on error.
+func Execute(qs *services.QuickExcludeService) error {
+	cmd := NewRootCommand(qs)
 	if err := cmd.Execute(); err != nil {
 		return fmt.Errorf("jart-stow: %w", err)
 	}
