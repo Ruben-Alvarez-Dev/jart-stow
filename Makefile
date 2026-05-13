@@ -37,6 +37,12 @@ api-run:
 api-test:
 	cd api && pytest --cov=app --cov-report=xml
 
+tui-install:
+	cd api && pip install -e ".[tui]"
+
+tui-run:
+	cd api && python -m tui.app
+
 # --- Docs ---
 
 docs-serve:

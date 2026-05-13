@@ -14,6 +14,8 @@
 api/__pycache__/
 api/app/__pycache__/
 api/app/**/__pycache__/
+api/tui/__pycache__/
+api/tui/**/__pycache__/
 api/tests/__pycache__/
 api/*.pyc
 api/.venv/
