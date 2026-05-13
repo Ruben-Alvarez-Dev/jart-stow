@@ -15,7 +15,7 @@ Jart-Stow is a macOS-native development hygiene and backup exclusion manager. It
 
 2. **System Hygiene:** detects and presents system junk for review — unused Docker resources, stale APFS snapshots, system caches, temporary files — and allows granular, user-verified cleanup across all connected volumes.
 
-A Bubble Tea TUI and a FastAPI 3.0 REST API expose the system state for interactive management and external consumption.
+A **Python Textual TUI** (primary) and a **Go Bubble Tea TUI** (fallback) provide interactive terminal management. A FastAPI 3.0 REST API serves as the backend for the Textual TUI and external consumers.
 
 ---
 
@@ -23,19 +23,36 @@ A Bubble Tea TUI and a FastAPI 3.0 REST API expose the system state for interact
 
 ### ADR-001: Hybrid Architecture
 
-**Context:** The system requires a low-level macOS daemon (FSEvents, launchd, tmutil) and a professional TUI (Bubble Tea), both of which are best served by Go. Simultaneously, it requires a standards-compliant REST API with OpenAPI 3.0 documentation, best served by FastAPI 3.0 in Python.
+**Context:** The system requires a low-level macOS daemon (FSEvents, launchd, tmutil), a professional TUI, and a standards-compliant REST API with OpenAPI 3.0 documentation.
 
-**Decision:** Adopt a **Hybrid Architecture** with two runtimes communicating through a shared SQLite database.
+**Decision:** Adopt a **Hybrid Architecture** with two runtimes and two TUIs (see ADR-009):
+
+```
+┌─────────────────────────────────────────────┐
+│        Python Stack (primary TUI)            │
+│  Textual TUI → HTTP → FastAPI → SQLite      │
+└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│        Go Stack (fallback + daemon)          │
+│  CLI/Bubble Tea TUI → SQLite (direct)        │
+│  Daemon (FSEvents) → SQLite (direct)         │
+└─────────────────────────────────────────────┘
+```
 
 **Rationale:**
-- Go provides zero-dependency binaries, native FSEvents support, and the best TUI ecosystem (Charmbracelet).
+- Go provides zero-dependency binaries, native FSEvents support, and efficient CLI handling.
 - Python/FastAPI provides the richest OpenAPI ecosystem, automatic interactive docs, and rapid API development.
-- SQLite as the shared state layer avoids IPC complexity (no gRPC, no message queue) while remaining filesystem-portable.
+- Textual (Python) provides CSS-based layout and reactive widgets, reducing UI code vs manual lipgloss.
+- SQLite as the shared state layer avoids IPC complexity (no gRPC, no message queue).
 
 **Consequences:**
 - Two runtimes to build and package.
 - SQLite must be accessed with WAL mode to allow concurrent reads from both processes.
 - Deployment must ensure both binaries are installed together.
+- Two TUIs to maintain: Python Textual (primary) and Go Bubble Tea (fallback).
+- The Textual TUI requires the FastAPI server to be running.
+
+See [ADR-009: Python Textual TUI as Primary Interactive Interface](../docs/architecture/decisions/adr-009-python-textual-tui-primary.md).
 
 ---
 
@@ -44,41 +61,50 @@ A Bubble Tea TUI and a FastAPI 3.0 REST API expose the system state for interact
 The system follows **Hexagonal (Ports & Adapters)** architecture, with domain logic isolated from infrastructure concerns.
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                     PRIMARY ACTORS                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-│  │   CLI    │  │   TUI    │  │ REST API │  │  Daemon   │ │
-│  │ (Cobra)  │  │(BubbleT) │  │(FastAPI) │  │(FSEvents) │ │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘ │
-│       │             │             │             │        │
-│       └─────────────┴──────┬──────┴─────────────┘        │
-│                            │                              │
-│                   ┌────────▼────────┐                     │
-│                   │   APPLICATION   │                     │
-│                   │    SERVICES     │                     │
-│                   │  (Use Cases)    │                     │
-│                   └────────┬────────┘                     │
-│                            │                              │
-│                   ┌────────▼────────┐                     │
-│                   │     DOMAIN      │                     │
-│                   │  (Entities,     │                     │
-│                   │   Value Objs)   │                     │
-│                   └────────┬────────┘                     │
-│                            │                              │
-│                   ┌────────▼────────┐                     │
-│                   │      PORTS      │                     │
-│                   │  (Interfaces)   │                     │
-│                   └────────┬────────┘                     │
-│                            │                              │
-│       ┌────────────────────┼────────────────────┐        │
-│       │                    │                    │        │
-│  ┌────▼─────┐  ┌───────────▼──┐  ┌─────────────▼───┐    │
-│  │  SQLite  │  │   tmutil     │  │      CCC         │    │
-│  │ Adapter  │  │   Adapter    │  │    Adapter       │    │
-│  └──────────┘  └──────────────┘  └─────────────────┘    │
-│                                                          │
-│                   SECONDARY ADAPTERS                     │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      PRIMARY ACTORS                           │
+│  ┌──────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────┐ │
+│  │   CLI    │  │ TUI (Python) │  │ REST API │  │  Daemon   │ │
+│  │ (Cobra)  │  │  (Textual)   │  │(FastAPI) │  │(FSEvents) │ │
+│  └────┬─────┘  └──────┬───────┘  └────┬─────┘  └────┬─────┘ │
+│       │               │               │             │        │
+│       │               └───────┬───────┘             │        │
+│       │                       │                     │        │
+│       │              ┌────────▼────────┐            │        │
+│       │              │  APPLICATION    │            │        │
+│       │              │   SERVICES      │            │        │
+│       │              │  (Python)       │            │        │
+│       │              └────────┬────────┘            │        │
+│       │                       │                     │        │
+│       │              ┌────────▼────────┐            │        │
+│       │              │     DOMAIN      │            │        │
+│       │              │  (Pydantic)     │            │        │
+│       │              └────────┬────────┘            │        │
+│       │                       │                     │        │
+│       │              ┌────────▼────────┐            │        │
+│       │              │  SQLite (async) │            │        │
+│       │              └────────┬────────┘            │        │
+│       │                       │                     │        │
+│       │              ┌────────▼────────┐            │        │
+│       │              │   SQLite DB     │            │        │
+│       │              │  (WAL mode)     │◄───────────┘        │
+│       │              └────────┬────────┘                     │
+│       │                       │                              │
+│       │              ┌────────▼────────┐                     │
+│       │              │  Go Stack       │                     │
+│       │              │  (CLI, Bubble   │                     │
+│       │              │   Tea TUI,      │                     │
+│       │              │   Daemon)       │                     │
+│       │              │  ┌───────────┐  │                     │
+│       │              │  │ Domain    │  │                     │
+│       │              │  │ Ports     │  │                     │
+│       │              │  │ Adapters  │  │                     │
+│       │              │  │ (tmutil,  │  │                     │
+│       │              │  │  CCC,     │  │                     │
+│       │              │  │  FSEvents)│  │                     │
+│       │              │  └───────────┘  │                     │
+│       │              └─────────────────┘                     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Layer Dependency Rule
@@ -120,14 +146,24 @@ FSEvents → Daemon detects new folder in /Code
          → DaemonEventRepository.Log(event)
 ```
 
-### TUI Status Query Flow
+### TUI Status Query Flow (Bubble Tea — direct DB access)
 
 ```
-User presses "s" in TUI
+User presses "s" in Go TUI
          → StatusScreen loads
          → ProjectRepository.FindAll()
          → ExclusionRepository.FindByProject(projectID)
          → TUI renders tree + stats
+```
+
+### TUI Status Query Flow (Textual — via REST API)
+
+```
+User opens Dashboard in Python TUI
+         → client.get_projects()
+         → HTTP GET /api/v1/projects
+         → FastAPI endpoint → SQLite query
+         → JSON response → Textual widget renders
 ```
 
 ### REST API Query Flow
@@ -141,6 +177,23 @@ GET /api/v1/projects
 ```
 
 ---
+
+## 6a. TUI Comparison
+
+| Aspect | Python TUI (Textual) | Go TUI (Bubble Tea) |
+|---|---|---|
+| **Location** | `api/tui/` | `internal/tui/` |
+| **Backend** | REST API (HTTP) | SQLite (direct) |
+| **Dependencies** | Requires Python + API server | Self-contained binary |
+| **Layout** | CSS-based (TCSS) | Lipgloss (programmatic) |
+| **Widgets** | Built-in DataTable, Tree, Input, etc. | Bubbles components |
+| **State** | Reactive via Textual | Manual tea.Model |
+| **Primary use** | Full-featured daily use | Quick operations, CI, fallback |
+| **Startup** | `jart-stow api &` then `jart-stow tui` | `jart-stow tui` |
+
+Both TUIs share the same 7-screen structure: Dashboard, Scanner, Exclusions, Rules, Audit, Hygiene, Report.
+
+See [ADR-009](../docs/architecture/decisions/adr-009-python-textual-tui-primary.md) for the full rationale.
 
 ## 6. Directory Structure
 
@@ -223,14 +276,13 @@ jart-stow/
 │   │   │       │   ├── projects.py
 │   │   │       │   ├── exclusions.py
 │   │   │       │   ├── daemon.py
+│   │   │       │   ├── junk.py
 │   │   │       │   ├── rules.py
-│   │   │       │   └── reports.py
+│   │   │       │   ├── reports.py
+│   │   │       │   ├── watch_roots.py
+│   │   │       │   └── health.py
 │   │   │       └── schemas/
-│   │   │           ├── project.py
-│   │   │           ├── exclusion.py
-│   │   │           ├── daemon.py
-│   │   │           ├── rule.py
-│   │   │           └── report.py
+│   │   │           └── __init__.py       # Pydantic schemas
 │   │   ├── core/
 │   │   │   ├── __init__.py
 │   │   │   ├── config.py
@@ -242,12 +294,27 @@ jart-stow/
 │   │   └── infrastructure/
 │   │       ├── __init__.py
 │   │       └── sqlite_repository.py
+│   ├── tui/                              # Python Textual TUI (primary interface)
+│   │   ├── __init__.py
+│   │   ├── app.py                        # Main Textual app with navigation
+│   │   ├── client.py                     # Async HTTP client for REST API
+│   │   ├── styles.tcss                   # Textual CSS theme
+│   │   ├── screens/
+│   │   │   ├── __init__.py
+│   │   │   ├── dashboard.py
+│   │   │   ├── exclusions.py
+│   │   │   ├── hygiene.py
+│   │   │   ├── rules.py
+│   │   │   ├── audit.py
+│   │   │   └── report.py
+│   │   └── widgets/
+│   │       ├── __init__.py
+│   │       ├── confirm_modal.py
+│   │       ├── nav_bar.py
+│   │       └── status_card.py
 │   ├── tests/
 │   │   ├── conftest.py
-│   │   ├── test_projects.py
-│   │   ├── test_exclusions.py
-│   │   ├── test_daemon.py
-│   │   └── test_rules.py
+│   │   └── test_api.py
 │   ├── pyproject.toml
 │   └── requirements.txt
 ├── docs/                            # MkDocs + Material
@@ -255,7 +322,8 @@ jart-stow/
 │   ├── architecture/
 │   │   ├── overview.md
 │   │   └── decisions/
-│   │       └── adr-001-hybrid-architecture.md
+│   │       ├── adr-001-hybrid-architecture.md
+│   │       └── adr-009-python-textual-tui-primary.md
 │   ├── api/
 │   │   └── reference.md
 │   ├── tui/
