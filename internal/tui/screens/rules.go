@@ -2,6 +2,7 @@ package screens
 
 import (
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/domain"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/components"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -76,29 +77,13 @@ func (m *RulesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the rules screen layout.
 func (m *RulesModel) View() string {
-	if m.width == 0 {
+	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-
 	m.loadData()
-
-	header := m.renderHeader()
-	globalSection := m.renderGlobalSection()
-	projectSection := m.renderProjectSection()
-	navBar := m.renderNavBar()
-
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		globalSection,
-		projectSection,
-	)
-
-	mainArea := lipgloss.NewStyle().
-		Width(m.width).
-		Height(m.height - 3).
-		Render(content)
-
-	return lipgloss.JoinVertical(lipgloss.Left, mainArea, navBar)
+	s := components.NewScreen(m.theme, m.width, m.height, "RULES", "")
+	panels := lipgloss.JoinVertical(lipgloss.Left, m.renderGlobalSection(), m.renderProjectSection())
+	return s.Render(panels, "", "← Esc:Back  ·  q:Quit")
 }
 
 func (m *RulesModel) loadData() {

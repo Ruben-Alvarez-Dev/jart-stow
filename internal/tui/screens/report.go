@@ -2,6 +2,7 @@ package screens
 
 import (
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/domain"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/components"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -62,31 +63,14 @@ func (m *ReportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the report screen layout.
 func (m *ReportModel) View() string {
-	if m.width == 0 {
+	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-
 	m.loadData()
-
-	header := m.renderHeader()
-	spaceSavedSection := m.renderSpaceSaved()
-	panels := m.renderPanels()
-	daemonSection := m.renderDaemonSection()
-	navBar := m.renderNavBar()
-
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		spaceSavedSection,
-		panels,
-		daemonSection,
-	)
-
-	mainArea := lipgloss.NewStyle().
-		Width(m.width).
-		Height(m.height - 3).
-		Render(content)
-
-	return lipgloss.JoinVertical(lipgloss.Left, mainArea, navBar)
+	s := components.NewScreen(m.theme, m.width, m.height, "REPORT", "")
+	panels := lipgloss.JoinVertical(lipgloss.Left,
+		m.renderSpaceSaved(), m.renderPanels(), m.renderDaemonSection())
+	return s.Render(panels, "", "← Esc:Back  ·  q:Quit")
 }
 
 func (m *ReportModel) loadData() {

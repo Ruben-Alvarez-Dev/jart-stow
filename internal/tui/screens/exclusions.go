@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/domain"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/components"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
@@ -250,16 +251,18 @@ func (m *ExclusionsModel) rebuildTable() {
 		})
 	}
 
-	maxHeight := m.height - 10
-	if maxHeight < 4 {
-		maxHeight = 4
+	// Available rows for the table:
+	// m.height - header(3) - filter(2) - detail(8) - nav(1) - padding(2)
+	maxRows := m.height - 16
+	if maxRows < 3 {
+		maxRows = 3
 	}
 	rowCount := len(rows)
 	if rowCount < 1 {
 		rowCount = 1
 	}
-	if rowCount > maxHeight {
-		rowCount = maxHeight
+	if rowCount > maxRows {
+		rowCount = maxRows
 	}
 
 	tbl := table.New(
@@ -293,33 +296,26 @@ func (m *ExclusionsModel) rebuildTable() {
 // View renders the exclusions screen layout: header, filter bar, table, and
 // navigation bar.
 func (m *ExclusionsModel) View() string {
-	if m.width == 0 {
+	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-
 	m.loadData()
 	m.ensureTable()
 
-	header := m.renderHeader()
-	filterBar := m.renderFilterBar()
-	tableContent := m.renderTable()
-	detailPanel := m.renderDetailPanel()
-	navBar := m.renderNavBar()
+	// Count from header goes into screen subtitle
+	subtitle := ""
+	if exclusions, err := m.loadFilteredExclusions(); err == nil {
+		subtitle = itoa(len(exclusions)) + " active"
+	}
+	s := components.NewScreen(m.theme, m.width, m.height, "EXCLUSIONS", subtitle)
 
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		filterBar,
+	panels := lipgloss.JoinVertical(lipgloss.Left,
+		m.renderFilterBar(),
 		"",
-		tableContent,
-		detailPanel,
+		m.renderTable(),
+		m.renderDetailPanel(),
 	)
-
-	mainArea := lipgloss.NewStyle().
-		Width(m.width).
-		Height(m.height - 3).
-		Render(content)
-
-	return lipgloss.JoinVertical(lipgloss.Left, mainArea, navBar)
+	return s.Render(panels, "", "f:Filter s:Sort r:Remove ↵:Reload Esc:Back q:Quit")
 }
 
 func (m *ExclusionsModel) ensureTable() {

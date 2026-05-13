@@ -72,3 +72,37 @@ type ScreenExclusionManager interface {
 	// RemoveExclusion removes an exclusion (marks it as removed in DB).
 	RemoveExclusion(exclusionID int64) error
 }
+
+// ============================================================================
+// ScreenQuickExclude defines simple scan-and-exclude operations for the Scanner
+// and Dashboard screens. This replicates the EXCLUSION-SCRIPT workflow without
+// requiring a project in the database.
+// ============================================================================
+
+// ScreenQuickExclude provides a direct scan-and-exclude flow for the TUI screens.
+type ScreenQuickExclude interface {
+	// ScanPath scans a path for development artifacts and returns results.
+	// Returns whether each artifact is already excluded.
+	ScanPath(path string) ([]QuickScanResult, error)
+
+	// ExcludePaths applies exclusions to all configured backup systems.
+	// Returns a map of path → error for failures.
+	ExcludePaths(paths []string) map[string]error
+
+	// RemoveExclusions removes exclusions from all configured backup systems.
+	RemoveExclusions(paths []string) map[string]error
+
+	// ListExclusions returns all currently excluded paths per backup system.
+	ListExclusions() (map[string][]string, error)
+
+	// GetVolumes returns available volumes (Home + mounted drives).
+	GetVolumes() []domain.Volume
+}
+
+// QuickScanResult represents a found artifact in a quick scan.
+type QuickScanResult struct {
+	Path        string
+	PatternName string
+	SizeBytes   int64
+	AlreadyDone bool
+}

@@ -2,6 +2,7 @@ package screens
 
 import (
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/domain"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/components"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
@@ -32,8 +33,8 @@ type catScanCompleteMsg struct {
 // category in an interactive table. Users can scan categories, review
 // discovered items, and approve or skip them.
 type HygieneModel struct {
-	theme *theme.Theme
-	junk  JunkLister
+	theme      *theme.Theme
+	junk       JunkLister
 	junkRunner ScreenJunkScanRunner
 
 	width  int
@@ -359,29 +360,22 @@ func (m *HygieneModel) rebuildItemsTable() {
 // View renders the hygiene screen: header, categories sidebar, items panel,
 // detail panel, and navigation bar.
 func (m *HygieneModel) View() string {
-	if m.width == 0 {
+	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-
 	m.loadData()
 
-	header := m.renderHeader()
-	panels := m.renderPanels()
-	detailPanel := m.renderDetailPanel()
-	navBar := m.renderNavBar()
+	// Pending count in subtitle
+	subtitle := ""
+	if m.junk != nil {
+		if count, err := m.junk.CountPendingItems(); err == nil && count > 0 {
+			subtitle = itoa(count) + " pending"
+		}
+	}
+	s := components.NewScreen(m.theme, m.width, m.height, "HYGIENE", subtitle)
 
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		panels,
-		detailPanel,
-	)
-
-	mainArea := lipgloss.NewStyle().
-		Width(m.width).
-		Height(m.height - 3).
-		Render(content)
-
-	return lipgloss.JoinVertical(lipgloss.Left, mainArea, navBar)
+	panels := lipgloss.JoinVertical(lipgloss.Left, m.renderPanels(), m.renderDetailPanel())
+	return s.Render(panels, "", "← Esc:Back  ·  q:Quit")
 }
 
 func (m *HygieneModel) loadData() {

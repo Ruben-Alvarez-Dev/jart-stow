@@ -4,6 +4,7 @@ package screens
 
 import (
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/domain"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/components"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -112,31 +113,23 @@ func (m *DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the dashboard layout.
 func (m *DashboardModel) View() string {
-	if m.width == 0 {
+	if m.width == 0 || m.height == 0 {
 		return "Loading dashboard..."
 	}
 
 	m.refreshData()
 
-	header := m.renderHeader()
+	s := components.NewScreen(m.theme, m.width, m.height,
+		"DASHBOARD", "Development Hygiene & Backup Exclusion Manager")
+
 	statusCard := m.renderStatusCard()
 	statsCard := m.renderStatsCard()
 	activitySection := m.renderActivitySection()
-	navBar := m.renderNavBar()
 
-	// Layout: two cards side by side on top, activity below
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top, statusCard, statsCard)
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		topRow,
-		activitySection,
-	)
-	mainArea := lipgloss.NewStyle().
-		Width(m.width).
-		Height(m.height - 3).
-		Render(content)
+	panels := lipgloss.JoinVertical(lipgloss.Left, topRow, activitySection)
 
-	return lipgloss.JoinVertical(lipgloss.Left, mainArea, navBar)
+	return s.Render(panels, "", "← Esc:Back  ·  q:Quit")
 }
 
 func (m *DashboardModel) refreshData() {
@@ -327,69 +320,4 @@ func formatInt(v int) string {
 }
 
 // formatBytes returns a human-readable byte string.
-func formatBytes(bytes int64) string {
-	if bytes == 0 {
-		return "0 B"
-	}
-	const unit = 1024
-	if bytes < unit {
-		return itoa64(bytes) + " B"
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	val := float64(bytes) / float64(div)
-	unitStr := []string{"KB", "MB", "GB", "TB"}[exp]
-	intPart := int(val)
-	decPart := int((val - float64(intPart)) * 10)
-	if decPart > 0 {
-		return itoa(intPart) + "." + itoa(decPart) + " " + unitStr
-	}
-	return itoa(intPart) + " " + unitStr
-}
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
-}
-
-func itoa64(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
-}

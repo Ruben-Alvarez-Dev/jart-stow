@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/components"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
@@ -8,85 +9,83 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ============================================================================
-// Scanner Screen
-// ============================================================================
-
-// scanCompleteMsg carries the result of an async scan operation.
 type scanCompleteMsg struct {
 	results []ScanResult
 	err     error
 }
 
-// ScannerModel displays a volume/directory browser on the left and scan results
-// on the right. It supports browsing filesystem directories, triggering scans,
-// and viewing discovered artifacts in an interactive table.
+type excludeDoneMsg struct {
+	success int
+	failed  int
+	err     error
+}
+
 type ScannerModel struct {
-	theme      *theme.Theme
-	watchRoots WatchRootProvider
-	scanEngine ScreenScanEngine
+	theme        *theme.Theme
+	watchRoots   WatchRootProvider
+	scanEngine   ScreenScanEngine
+	quickExclude ScreenQuickExclude
 
-	width  int
-	height int
+	width, height int
+	focus         int // 0 = browser, 1 = results
+	navRequest    string
 
-	focus int // 0 = browser (left), 1 = results (right)
-
-	navRequest string
-
-	// ── Browser state ──────────────────────────────────────────────────
-	entries       []Volume // current-level directory entries
-	breadcrumb    []string // path segments for breadcrumb display
-	currentPath   string   // full path of the directory being viewed
+	entries       []Volume
+	breadcrumb    []string
+	currentPath   string
 	browserCursor int
 	entriesLoaded bool
 	browserErr    string
 
-	// ── Scan state ─────────────────────────────────────────────────────
 	scanning     bool
 	spinner      spinner.Model
 	results      []ScanResult
 	resultsTable table.Model
 	scanPath     string
 	scanErr      string
+
+	selected    map[int]bool
+	allSelected bool
+
+	excluding      bool
+	excludeSuccess int
+	excludeFailed  int
+	excludeErr     string
+
+	// Available content height inside results card (set during View, used by rebuildResultsTable)
+	resultsContentH int
 }
 
-// NewScannerModel creates a new ScannerModel with volume browsing and scan
-// capabilities. All providers may be nil; the screen shows appropriate empty
-// states when data is unavailable.
-func NewScannerModel(t *theme.Theme, watchRoots WatchRootProvider, scanEngine ScreenScanEngine) *ScannerModel {
+func NewScannerModel(t *theme.Theme, watchRoots WatchRootProvider, scanEngine ScreenScanEngine, quickExclude ScreenQuickExclude) *ScannerModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-
 	return &ScannerModel{
-		theme:      t,
-		watchRoots: watchRoots,
-		scanEngine: scanEngine,
-		spinner:    sp,
+		theme:        t,
+		watchRoots:   watchRoots,
+		scanEngine:   scanEngine,
+		quickExclude: quickExclude,
+		spinner:      sp,
+		selected:     make(map[int]bool),
 	}
 }
 
-// Init initializes the scanner screen. Returns nil; the screen is synchronous
-// until the user triggers an action.
-func (m *ScannerModel) Init() tea.Cmd {
-	return nil
-}
+func (m *ScannerModel) Init() tea.Cmd { return nil }
 
-// Update handles messages for the scanner screen, including keyboard input,
-// window resizes, spinner ticks, and async scan completion.
 func (m *ScannerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-
+		if len(m.results) > 0 {
+			m.rebuildResultsTable()
+		}
 	case spinner.TickMsg:
-		if m.scanning {
+		if m.scanning || m.excluding {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
-
 	case scanCompleteMsg:
 		m.scanning = false
 		if msg.err != nil {
@@ -96,93 +95,138 @@ func (m *ScannerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scanErr = ""
 			m.results = msg.results
 		}
+		m.selected = make(map[int]bool)
+		m.allSelected = false
 		m.rebuildResultsTable()
-
+	case excludeDoneMsg:
+		m.excluding = false
+		if msg.err != nil {
+			m.excludeErr = msg.err.Error()
+		} else {
+			m.excludeSuccess = msg.success
+			m.excludeFailed = msg.failed
+			m.excludeErr = ""
+		}
+		if m.scanPath != "" {
+			m.scanning = true
+			return m, tea.Batch(m.spinner.Tick, m.runScan(m.scanPath))
+		}
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "tab":
 			m.focus = (m.focus + 1) % 2
-
 		case "esc", "backspace":
-			return m, m.handleBack()
-
+			m.navRequest = "back"
 		case "q":
 			m.navRequest = "quit"
-
-		case "up", "k":
-			return m, m.handleUp()
-
-		case "down", "j":
-			return m, m.handleDown()
-
-		case "enter":
-			return m, m.handleEnter()
-
+		case "left", "h":
+			return m, m.handleBack()
 		case "right", "l":
 			return m, m.handleBrowseInto()
-
+		case "up", "k":
+			return m, m.handleUp()
+		case "down", "j":
+			return m, m.handleDown()
+		case "enter":
+			return m, m.handleEnter()
+		case " ":
+			if m.focus == 1 && len(m.results) > 0 {
+				idx := m.resultsTable.Cursor()
+				if idx >= 0 && idx < len(m.results) {
+					m.selected[idx] = !m.selected[idx]
+					m.allSelected = false
+					m.rebuildResultsTable()
+				}
+			}
+		case "a":
+			if len(m.results) > 0 {
+				m.allSelected = !m.allSelected
+				for i := range m.results {
+					m.selected[i] = m.allSelected
+				}
+				m.rebuildResultsTable()
+			}
 		default:
-			// When results panel is focused, delegate to table
 			if m.focus == 1 && m.resultsTable.Width() > 0 {
 				var cmd tea.Cmd
 				m.resultsTable, cmd = m.resultsTable.Update(msg)
 				return m, cmd
 			}
 		}
-
 	default:
-		// Forward unknown messages to the table when focused
 		if m.focus == 1 && m.resultsTable.Width() > 0 {
 			var cmd tea.Cmd
 			m.resultsTable, cmd = m.resultsTable.Update(msg)
 			return m, cmd
 		}
 	}
-
 	return m, nil
 }
 
-// handleEnter processes the Enter key based on context:
-//   - Browser not loaded: loads volumes from the scan engine.
-//   - Browser loaded and entry selected: triggers an async scan of the path.
 func (m *ScannerModel) handleEnter() tea.Cmd {
-	if m.focus != 0 {
-		return nil
+	if m.focus == 0 {
+		if !m.entriesLoaded {
+			m.loadVolumes()
+			return nil
+		}
+		if m.browserCursor < 0 || m.browserCursor >= len(m.entries) {
+			return nil
+		}
+		entry := m.entries[m.browserCursor]
+		if !entry.IsDir || m.scanEngine == nil {
+			return nil
+		}
+		m.scanning = true
+		m.scanErr = ""
+		m.scanPath = entry.Path
+		m.results = nil
+		m.resultsTable = table.Model{}
+		m.excludeSuccess = 0
+		m.excludeFailed = 0
+		m.excludeErr = ""
+		m.selected = make(map[int]bool)
+		m.allSelected = false
+		return tea.Batch(m.spinner.Tick, m.runScan(entry.Path))
 	}
-
-	if !m.entriesLoaded {
-		m.loadVolumes()
-		return nil
+	if m.focus == 1 && len(m.results) > 0 {
+		paths := m.getSelectedPaths()
+		if len(paths) == 0 {
+			return nil
+		}
+		m.excluding = true
+		m.excludeErr = ""
+		return tea.Batch(m.spinner.Tick, m.runExclude(paths))
 	}
-
-	if m.browserCursor < 0 || m.browserCursor >= len(m.entries) {
-		return nil
-	}
-
-	entry := m.entries[m.browserCursor]
-	if !entry.IsDir {
-		return nil
-	}
-
-	if m.scanEngine == nil {
-		m.scanErr = "Scan engine not connected"
-		return nil
-	}
-
-	m.scanning = true
-	m.scanErr = ""
-	m.scanPath = entry.Path
-	m.results = nil
-	m.resultsTable = table.Model{}
-
-	return tea.Batch(
-		m.spinner.Tick,
-		m.runScan(entry.Path),
-	)
+	return nil
 }
 
-// handleBrowseInto browses into the selected directory by calling
-// BrowseDirectory and updating the breadcrumb.
+func (m *ScannerModel) handleBack() tea.Cmd {
+	if !m.entriesLoaded || len(m.breadcrumb) == 0 {
+		return nil
+	}
+	m.breadcrumb = m.breadcrumb[:len(m.breadcrumb)-1]
+	if len(m.breadcrumb) == 0 {
+		m.currentPath = ""
+		m.loadVolumes()
+	} else {
+		if idx := lastSlashIndex(m.currentPath); idx > 0 {
+			parentPath := m.currentPath[:idx]
+			m.currentPath = parentPath
+			if m.scanEngine != nil {
+				children, err := m.scanEngine.BrowseDirectory(parentPath)
+				if err != nil {
+					m.browserErr = err.Error()
+				} else {
+					m.entries = children
+					m.browserCursor = 0
+					m.browserErr = ""
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (m *ScannerModel) handleBrowseInto() tea.Cmd {
 	if m.focus != 0 || !m.entriesLoaded {
 		return nil
@@ -190,22 +234,15 @@ func (m *ScannerModel) handleBrowseInto() tea.Cmd {
 	if m.browserCursor < 0 || m.browserCursor >= len(m.entries) {
 		return nil
 	}
-
 	entry := m.entries[m.browserCursor]
-	if !entry.IsDir {
+	if !entry.IsDir || m.scanEngine == nil {
 		return nil
 	}
-
-	if m.scanEngine == nil {
-		return nil
-	}
-
 	children, err := m.scanEngine.BrowseDirectory(entry.Path)
 	if err != nil {
 		m.browserErr = err.Error()
 		return nil
 	}
-
 	m.breadcrumb = append(m.breadcrumb, entry.Name)
 	m.currentPath = entry.Path
 	m.entries = children
@@ -214,48 +251,6 @@ func (m *ScannerModel) handleBrowseInto() tea.Cmd {
 	return nil
 }
 
-// handleBack navigates one level up in the directory browser.
-// If already at the root level, requests navigation back to the main menu.
-func (m *ScannerModel) handleBack() tea.Cmd {
-	if !m.entriesLoaded || len(m.breadcrumb) == 0 {
-		m.navRequest = "back"
-		return nil
-	}
-
-	// Pop breadcrumb
-	m.breadcrumb = m.breadcrumb[:len(m.breadcrumb)-1]
-
-	// Determine parent path
-	var parentPath string
-	if len(m.breadcrumb) == 0 {
-		// Back to volumes root
-		m.currentPath = ""
-		m.loadVolumes()
-	} else {
-		// Back to previous directory — we need to reconstruct the path
-		// Use the first volume's path as a heuristic: rebuild parent from currentPath
-		if idx := lastSlashIndex(m.currentPath); idx > 0 {
-			parentPath = m.currentPath[:idx]
-		} else {
-			parentPath = "/"
-		}
-		m.currentPath = parentPath
-		if m.scanEngine != nil {
-			children, err := m.scanEngine.BrowseDirectory(parentPath)
-			if err != nil {
-				m.browserErr = err.Error()
-			} else {
-				m.entries = children
-				m.browserCursor = 0
-				m.browserErr = ""
-			}
-		}
-	}
-
-	return nil
-}
-
-// handleUp moves the cursor up in the active panel.
 func (m *ScannerModel) handleUp() tea.Cmd {
 	if m.focus == 0 {
 		if m.browserCursor > 0 {
@@ -267,7 +262,6 @@ func (m *ScannerModel) handleUp() tea.Cmd {
 	return nil
 }
 
-// handleDown moves the cursor down in the active panel.
 func (m *ScannerModel) handleDown() tea.Cmd {
 	if m.focus == 0 {
 		if m.browserCursor < len(m.entries)-1 {
@@ -279,7 +273,6 @@ func (m *ScannerModel) handleDown() tea.Cmd {
 	return nil
 }
 
-// loadVolumes loads the root volume list from the scan engine.
 func (m *ScannerModel) loadVolumes() {
 	if m.scanEngine == nil {
 		m.browserErr = "Scan engine not connected"
@@ -298,7 +291,6 @@ func (m *ScannerModel) loadVolumes() {
 	m.currentPath = ""
 }
 
-// runScan returns a tea.Cmd that executes the scan asynchronously.
 func (m *ScannerModel) runScan(path string) tea.Cmd {
 	return func() tea.Msg {
 		results, err := m.scanEngine.ScanPath(path)
@@ -306,254 +298,275 @@ func (m *ScannerModel) runScan(path string) tea.Cmd {
 	}
 }
 
-// rebuildResultsTable creates a new bubbles table from the current results.
+func (m *ScannerModel) getSelectedPaths() []string {
+	hasSelection := false
+	for _, sel := range m.selected {
+		if sel {
+			hasSelection = true
+			break
+		}
+	}
+	if !hasSelection {
+		paths := make([]string, len(m.results))
+		for i, r := range m.results {
+			paths[i] = r.Path
+		}
+		return paths
+	}
+	var paths []string
+	for i, r := range m.results {
+		if m.selected[i] {
+			paths = append(paths, r.Path)
+		}
+	}
+	return paths
+}
+
+func (m *ScannerModel) runExclude(paths []string) tea.Cmd {
+	return func() tea.Msg {
+		failures := m.quickExclude.ExcludePaths(paths)
+		success := len(paths) - len(failures)
+		return excludeDoneMsg{success: success, failed: len(failures), err: nil}
+	}
+}
+
 func (m *ScannerModel) rebuildResultsTable() {
 	if len(m.results) == 0 {
 		m.resultsTable = table.Model{}
 		return
 	}
-
-	panelWidth := m.width - (m.width / 3) - 10
-	if panelWidth < 40 {
-		panelWidth = 40
+	// Use stored results content height if set, otherwise calculate default
+	contentH := m.resultsContentH
+	if contentH < 2 {
+		s := components.NewScreen(m.theme, m.width, m.height, "", "")
+		contentH = s.CardContentHeight(5)
+	}
+	maxDataRows := contentH - 4 // count(1) + blank(1) + table_header(1) + table_sep(1)
+	if maxDataRows < 1 {
+		maxDataRows = 1
+	}
+	if maxDataRows > len(m.results) {
+		maxDataRows = len(m.results)
 	}
 
-	pathWidth := panelWidth - 30
-	if pathWidth < 10 {
-		pathWidth = 10
+	panelWidth := (m.width*2)/3 - 6
+	if panelWidth < 30 {
+		panelWidth = 30
+	}
+	selW, patW, szW := 3, 14, 10
+	pathW := panelWidth - selW - patW - szW - 3
+	if pathW < 8 {
+		pathW = 8
 	}
 
 	columns := []table.Column{
-		{Title: "Path", Width: pathWidth},
-		{Title: "Pattern", Width: 16},
-		{Title: "Size", Width: 10},
+		{Title: "Sel", Width: selW},
+		{Title: "Path", Width: pathW},
+		{Title: "Pattern", Width: patW},
+		{Title: "Size", Width: szW},
 	}
-
 	var rows []table.Row
-	for _, r := range m.results {
-		rows = append(rows, table.Row{
-			r.Path,
-			r.PatternName,
-			formatBytes(r.SizeBytes),
-		})
+	for i, r := range m.results {
+		chk := " "
+		if m.selected[i] {
+			chk = "✓"
+		}
+		rows = append(rows, table.Row{chk, r.Path, r.PatternName, formatBytes(r.SizeBytes)})
 	}
 
-	maxHeight := m.height - 10
-	if maxHeight < 4 {
-		maxHeight = 4
-	}
-	rowCount := len(rows)
-	if rowCount > maxHeight {
-		rowCount = maxHeight
-	}
-
-	tbl := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithHeight(rowCount),
-		table.WithFocused(true),
-	)
-
-	// Style the table using theme colors
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("8")).
-		BorderBottom(true).
-		Bold(true).
-		Foreground(lipgloss.Color("6"))
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("6")).
-		Background(lipgloss.Color("235")).
-		Bold(false)
-	s.Cell = s.Cell.Foreground(lipgloss.Color("15"))
-
-	tbl.SetStyles(s)
+	tbl := table.New(table.WithColumns(columns), table.WithRows(rows), table.WithHeight(maxDataRows), table.WithFocused(true))
+	s2 := table.DefaultStyles()
+	s2.Header = s2.Header.BorderStyle(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")).BorderBottom(true).Bold(true).Foreground(lipgloss.Color("6"))
+	s2.Selected = s2.Selected.Foreground(lipgloss.Color("6")).Background(lipgloss.Color("235")).Bold(false)
+	s2.Cell = s2.Cell.Foreground(lipgloss.Color("15"))
+	tbl.SetStyles(s2)
 	m.resultsTable = tbl
 }
 
 // ============================================================================
-// Rendering
+// View — uses components.Screen for viewport-safe layout
 // ============================================================================
 
-// View renders the scanner screen layout: header, browser panel, results
-// panel, and navigation bar.
 func (m *ScannerModel) View() string {
-	if m.width == 0 {
+	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
 
-	header := m.renderHeader()
-	panels := m.renderPanels()
-	navBar := m.renderNavBar()
+	s := components.NewScreen(m.theme, m.width, m.height,
+		"SCANNER", "Browse, scan, and apply backup exclusions")
 
-	contentHeight := m.height - 3
-	if contentHeight < 1 {
-		contentHeight = 1
-	}
+	panels := m.renderPanels() // no action bar needed — space in nav
+	navText := m.buildNavText()
 
-	content := lipgloss.JoinVertical(lipgloss.Left, header, panels)
-	mainArea := lipgloss.NewStyle().
-		Width(m.width).
-		Height(contentHeight).
-		Render(content)
-
-	return lipgloss.JoinVertical(lipgloss.Left, mainArea, navBar)
-}
-
-func (m *ScannerModel) renderHeader() string {
-	title := m.theme.ScreenTitle.Render("SCANNER")
-	subtitle := m.theme.Muted.Render("Browse volumes and scan for development artifacts")
-	return lipgloss.JoinVertical(lipgloss.Left, title, subtitle, "")
+	return s.Render(panels, "", navText)
 }
 
 func (m *ScannerModel) renderPanels() string {
-	leftWidth := m.width / 3
-	if leftWidth < 25 {
-		leftWidth = 25
-	}
-	rightWidth := m.width - leftWidth - 4
-	if rightWidth < 25 {
-		rightWidth = 25
+	fullW := m.width - 2
+	if fullW < 20 {
+		fullW = 20
 	}
 
-	leftPanel := m.renderBrowserPanel(leftWidth)
-	rightPanel := m.renderResultsPanel(rightWidth)
+	// No action bar — use full ContentHeight for panels
+	s := components.NewScreen(m.theme, m.width, m.height, "", "")
+	panelsMaxH := s.ContentHeight() // all space between header and nav
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
-}
-
-func (m *ScannerModel) renderBrowserPanel(width int) string {
-	titleBar := m.theme.CardTitle.Render("Volume Browser")
-
-	// Breadcrumb
-	var breadcrumbLine string
-	if len(m.breadcrumb) == 0 {
-		breadcrumbLine = m.theme.Muted.Render("/ (volumes)")
-	} else {
-		parts := append([]string{"/"}, m.breadcrumb...)
-		breadcrumbLine = lipgloss.JoinHorizontal(lipgloss.Left,
-			m.theme.Primary.Render(joinPath(parts...)),
-		)
-	}
-	breadcrumbLine = m.theme.Muted.Render("  ") + breadcrumbLine
-
-	var lines []string
-	lines = append(lines, breadcrumbLine, "")
-
-	// Error
-	if m.browserErr != "" {
-		lines = append(lines, m.theme.ErrorText.Render("  "+m.browserErr))
-	} else if !m.entriesLoaded {
-		lines = append(lines,
-			m.theme.Muted.Render("  Press Enter to load volumes."),
-			"",
-			m.theme.Muted.Render("  Enter  = load / scan"),
-			m.theme.Muted.Render("  Right  = browse into"),
-			m.theme.Muted.Render("  Esc    = go back"),
-		)
-	} else if len(m.entries) == 0 {
-		lines = append(lines, m.theme.Muted.Render("  (empty directory)"))
-	} else {
-		// Directory entries
-		for i, entry := range m.entries {
-			prefix := "  "
-			if i == m.browserCursor && m.focus == 0 {
-				prefix = m.theme.SelectedRow.Render("> ")
-			} else {
-				prefix = "  "
-			}
-			icon := "[D]"
-			if !entry.IsDir {
-				icon = "[F]"
-			}
-			name := theme.Truncate(entry.Name, width-10)
-			line := prefix + icon + " " + name
-
-			if i == m.browserCursor && m.focus == 0 {
-				line = m.theme.SelectedRow.Render(prefix + icon + " " + name)
-			} else {
-				line = prefix + icon + " " + m.theme.Muted.Render(name)
-			}
-			lines = append(lines, line)
+	if len(m.results) > 0 {
+		// Results only: browser hidden, results get full panel height
+		m.resultsContentH = panelsMaxH - 5 // card chrome
+		if m.resultsContentH < 4 {
+			m.resultsContentH = 4
 		}
+		m.rebuildResultsTable()
+		return m.buildResultsPanel(fullW, m.resultsContentH)
 	}
 
-	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-
-	border := m.theme.CardBorder
-	if m.focus == 0 {
-		border = border.BorderForeground(theme.ColorPrimary)
+	// No results: side by side
+	leftW := m.width / 3
+	if leftW < 20 {
+		leftW = 20
 	}
-	return border.Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, titleBar, content))
-}
-
-func (m *ScannerModel) renderResultsPanel(width int) string {
-	titleBar := m.theme.CardTitle.Render("Scan Results")
-
-	var content string
-
-	if m.scanning {
-		spin := m.spinner.View() + " Scanning " + theme.Truncate(m.scanPath, width-20) + "..."
-		content = spin
-	} else if m.scanErr != "" {
-		content = m.theme.ErrorText.Render("  Error: " + m.scanErr)
-	} else if len(m.results) == 0 {
-		if m.scanPath != "" {
-			content = m.theme.Muted.Render("  Scan of " + theme.Truncate(m.scanPath, width-20) + "\n  produced no results.")
-		} else {
-			content = m.theme.Muted.Render("  No scan results yet.\n  Browse to a directory and press Enter to scan.")
-		}
-	} else {
-		// Show summary + table
-		summary := m.theme.Primary.Render("  " + itoa(len(m.results)) + " artifacts found in " + theme.Truncate(m.scanPath, width-30))
-		tableContent := m.resultsTable.View()
-		content = lipgloss.JoinVertical(lipgloss.Left, summary, "", tableContent)
+	rightW := m.width - leftW - 2
+	if rightW < 20 {
+		rightW = 20
 	}
-
-	border := m.theme.CardBorder
-	if m.focus == 1 {
-		border = border.BorderForeground(theme.ColorPrimary)
-	}
-	return border.Width(width).Render(lipgloss.JoinVertical(lipgloss.Left, titleBar, content))
-}
-
-func (m *ScannerModel) renderNavBar() string {
-	return m.theme.NavBar.Width(m.width).Padding(0, 1).Render(
-		"Tab: Switch  |  Up/Down: Navigate  |  Enter: Load/Scan  |  Right: Browse  |  Esc: Back  |  q: Quit",
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		m.buildBrowserPanel(leftW, panelsMaxH),
+		" ",
+		m.buildResultsPanel(rightW, panelsMaxH),
 	)
 }
 
-// ============================================================================
-// Navigation interface
-// ============================================================================
+func (m *ScannerModel) buildBrowserPanel(width int, contentMaxH int) string {
+	card := components.NewCard(m.theme, "Volume Browser", width)
 
-// NavRequest returns the pending navigation request, or "" if none.
-func (m *ScannerModel) NavRequest() string { return m.navRequest }
-
-// NavTarget returns the target model for navigation (nil for back/quit).
-func (m *ScannerModel) NavTarget() tea.Model { return nil }
-
-// ClearNav clears the navigation request.
-func (m *ScannerModel) ClearNav() { m.navRequest = "" }
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-// stringOfChar creates a string of n repeated characters.
-func stringOfChar(c byte, n int) string {
-	if n <= 0 {
-		return ""
+	var lines []string
+	if len(m.breadcrumb) == 0 {
+		lines = append(lines, m.theme.Muted.Render("/ (volumes)"))
+	} else {
+		parts := append([]string{"/"}, m.breadcrumb...)
+		lines = append(lines, m.theme.Primary.Render(joinPath(parts...)))
 	}
-	buf := make([]byte, n)
-	for i := range buf {
-		buf[i] = c
+	lines = append(lines, "")
+
+	if m.browserErr != "" {
+		lines = append(lines, m.theme.ErrorText.Render(m.browserErr))
+	} else if !m.entriesLoaded {
+		lines = append(lines, m.theme.Muted.Render("Press Enter to load volumes."))
+	} else if len(m.entries) == 0 {
+		lines = append(lines, m.theme.Muted.Render("(empty)"))
+	} else {
+		// Use contentMaxH for the available content height inside the card
+		// (or calculate from Screen if contentMaxH is not explicitly limited)
+		avail := contentMaxH - 2 // breadcrumb(1) + blank(1)
+		if avail < 1 {
+			avail = 1
+		}
+		// Also limit by card content height from screen
+		s := components.NewScreen(m.theme, m.width, m.height, "", "")
+		cardMax := s.CardContentHeight(0) // assume no actions for browser height
+		if avail > cardMax {
+			avail = cardMax
+		}
+		maxEntries := avail
+		showCount := len(m.entries)
+		if showCount > maxEntries {
+			showCount = maxEntries
+		}
+		for i := 0; i < showCount; i++ {
+			entry := m.entries[i]
+			name := theme.Truncate(entry.Name, width-8)
+			if i == m.browserCursor && m.focus == 0 {
+				lines = append(lines, m.theme.SelectedRow.Render("▸ [D] "+name))
+			} else {
+				lines = append(lines, "  [D] "+m.theme.Muted.Render(name))
+			}
+		}
+		if len(m.entries) > maxEntries {
+			lines = append(lines, m.theme.Muted.Render("  ... and "+itoa(len(m.entries)-maxEntries)+" more"))
+		}
 	}
-	return string(buf)
+
+	return card.Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 }
 
-// lastSlashIndex returns the index of the last '/' in s, or -1 if not found.
+func (m *ScannerModel) buildResultsPanel(width int, _ int) string {
+	card := components.NewCard(m.theme, "Scan Results", width)
+
+	var content string
+	if m.scanning {
+		content = m.spinner.View() + " Scanning..."
+	} else if m.excluding {
+		content = m.spinner.View() + " Applying exclusions..."
+	} else if m.scanErr != "" {
+		content = m.theme.ErrorText.Render("Error: " + m.scanErr)
+	} else if m.excludeErr != "" {
+		content = m.theme.ErrorText.Render("Error: " + m.excludeErr)
+	} else if m.excludeSuccess > 0 || m.excludeFailed > 0 {
+		content = m.theme.Primary.Render("✅ " + itoa(m.excludeSuccess) + " exc, ✗ " + itoa(m.excludeFailed) + " fail")
+		if len(m.results) > 0 {
+			content += "\n\n" + m.resultsTable.View()
+		}
+	} else if len(m.results) == 0 {
+		if m.scanPath != "" {
+			content = m.theme.Muted.Render("No artifacts found.")
+		} else {
+			content = m.theme.Muted.Render("Browse to a dir and press Enter.")
+		}
+	} else {
+		selCount := 0
+		for _, v := range m.selected {
+			if v {
+				selCount++
+			}
+		}
+		label := itoa(len(m.results)) + " artifacts"
+		if selCount > 0 && selCount < len(m.results) {
+			label += " (" + itoa(selCount) + " sel)"
+		} else if selCount == len(m.results) && len(m.results) > 0 {
+			label += " (all)"
+		}
+		content = m.theme.Primary.Render(label) + "\n\n" + m.resultsTable.View()
+	}
+
+	return card.Render(content)
+}
+
+func (m *ScannerModel) buildActionText() string {
+	if len(m.results) == 0 {
+		return ""
+	}
+	selCount := 0
+	for _, v := range m.selected {
+		if v {
+			selCount++
+		}
+	}
+	text := "[Space] Toggle"
+	if selCount == 0 {
+		text += " | [a] All"
+	} else {
+		text += " | [a] None"
+	}
+	if selCount > 0 {
+		text += " | [Enter] Exc " + itoa(selCount)
+	} else {
+		text += " | [Enter] Exc all " + itoa(len(m.results))
+	}
+	return components.ActionBar(m.theme, m.width, text)
+}
+
+func (m *ScannerModel) buildNavText() string {
+	if len(m.results) > 0 {
+		return "Tab ↹ | ↑↓ Nav | ␣ Sel | a All | ↵ Apply | Esc Menu | q Quit"
+	}
+	return "Tab ↹ | ↑↓ Nav | → Brws | ← Back | ↵ Scan | Esc Menu | q Quit"
+}
+
+func (m *ScannerModel) NavRequest() string   { return m.navRequest }
+func (m *ScannerModel) NavTarget() tea.Model { return nil }
+func (m *ScannerModel) ClearNav()            { m.navRequest = "" }
+
 func lastSlashIndex(s string) int {
 	for i := len(s) - 1; i >= 0; i-- {
 		if s[i] == '/' {
@@ -563,7 +576,6 @@ func lastSlashIndex(s string) int {
 	return -1
 }
 
-// joinPath joins path segments with '/'.
 func joinPath(segments ...string) string {
 	if len(segments) == 0 {
 		return ""

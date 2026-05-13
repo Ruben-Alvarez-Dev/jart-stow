@@ -2,6 +2,7 @@ package screens
 
 import (
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/domain"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/components"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/theme"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -72,29 +73,13 @@ func (m *AuditModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders the audit screen layout.
 func (m *AuditModel) View() string {
-	if m.width == 0 {
+	if m.width == 0 || m.height == 0 {
 		return "Loading..."
 	}
-
 	m.loadData()
-
-	header := m.renderHeader()
-	panels := m.renderPanels()
-	summaryBar := m.renderSummaryBar()
-	navBar := m.renderNavBar()
-
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		panels,
-		summaryBar,
-	)
-
-	mainArea := lipgloss.NewStyle().
-		Width(m.width).
-		Height(m.height - 3).
-		Render(content)
-
-	return lipgloss.JoinVertical(lipgloss.Left, mainArea, navBar)
+	s := components.NewScreen(m.theme, m.width, m.height, "AUDIT", "")
+	panels := lipgloss.JoinVertical(lipgloss.Left, m.renderPanels(), m.renderSummaryBar())
+	return s.Render(panels, "", "← Esc:Back  ·  q:Quit")
 }
 
 func (m *AuditModel) loadData() {
