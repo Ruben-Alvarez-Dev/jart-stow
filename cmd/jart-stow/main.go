@@ -46,16 +46,61 @@ func main() {
 	// Create the quick exclude service (no DB needed)
 	quickExcludeSvc := services.NewQuickExcludeService(scanService, backups...)
 
-	// Create root command with quick exclude wired up
-	cmd := cli.NewRootCommand(quickExcludeSvc)
+	// Try to open DB for full-featured CLI commands
+	var deps *cli.CLIDependencies
 
-	// Wire up the TUI subcommand
-	cmd.AddCommand(cli.NewTUICommand(runTUI))
+	dbPath := getDBPath()
+	conn, dbErr := sqlite.NewConnection(context.Background(), dbPath)
+	if dbErr == nil {
+		defer conn.Close()
+		repos := sqlite.NewRepositorySet(conn)
+
+		excludeService := services.NewExcludeService(
+			repos.Projects, repos.Exclusions, scanService, backups...,
+		)
+		junkService := createJunkScanService()
+
+		auditor := services.NewAuditService(
+			repos.Projects, repos.Exclusions, backups...,
+		)
+		reporter := services.NewReportService(
+			repos.Projects, repos.Exclusions, repos.Events, repos.JunkItems,
+		)
+
+		deps = &cli.CLIDependencies{
+			QuickExclude:  quickExcludeSvc,
+			Auditor:       auditor,
+			Reporter:      reporter,
+			RuleRepo:      repos.Rules,
+			ProjectRepo:   repos.Projects,
+			ExclusionRepo: repos.Exclusions,
+			EventRepo:     repos.Events,
+		}
+
+		// Override daemon run with real wiring
+		_ = excludeService
+		_ = junkService
+	} else {
+		log.Printf("warning: database not available (%v); some commands disabled", dbErr)
+		deps = &cli.CLIDependencies{
+			QuickExclude: quickExcludeSvc,
+		}
+	}
+
+	// Create root command
+	cmd := cli.NewRootCommand(deps)
+
+	// Wire up the TUI subcommand (needs its own DB connection for the TUI lifecycle)
+	cmd.AddCommand(cli.NewTUICommand(func(cobraCmd *cobra.Command, args []string) error {
+		return runTUI(cobraCmd, args)
+	}))
 
 	// Override daemon run with real wiring
 	if daemonCmd := findCobraSubcommand(cmd, "daemon"); daemonCmd != nil {
 		if runCmd := findCobraSubcommand(daemonCmd, "run"); runCmd != nil {
-			runCmd.RunE = runDaemon
+			runCmd.RunE = func(cobraCmd *cobra.Command, args []string) error {
+				return runDaemon(cobraCmd, args)
+			}
 		}
 	}
 

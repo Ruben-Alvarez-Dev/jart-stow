@@ -4,12 +4,25 @@ package cli
 import (
 	"fmt"
 
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/ports"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/services"
 	"github.com/spf13/cobra"
 )
 
+// CLIDependencies bundles all optional service dependencies for CLI commands.
+// Fields may be nil; commands degrade gracefully when a dependency is missing.
+type CLIDependencies struct {
+	QuickExclude *services.QuickExcludeService
+	Auditor      *services.AuditService
+	Reporter     *services.ReportService
+	RuleRepo     ports.RuleRepository
+	ProjectRepo  ports.ProjectRepository
+	ExclusionRepo ports.ExclusionRepository
+	EventRepo    ports.EventRepository
+}
+
 // NewRootCommand creates the root Cobra command for jart-stow.
-func NewRootCommand(qs *services.QuickExcludeService) *cobra.Command {
+func NewRootCommand(deps *CLIDependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "jart-stow",
 		Short: "macOS development hygiene & backup exclusion manager",
@@ -24,22 +37,37 @@ for user-reviewed cleanup.`,
 		},
 	}
 
-	// Register subcommands
+	// Register subcommands (order matches help output priority)
 	cmd.AddCommand(newDaemonCommand())
-	cmd.AddCommand(newScanCommand())
+	cmd.AddCommand(newScanCommand(deps.QuickExclude))
 	cmd.AddCommand(newStatusCommand())
-	cmd.AddCommand(newInspectCommand())
-	cmd.AddCommand(newAuditCommand())
-	cmd.AddCommand(newRuleCommand())
-	cmd.AddCommand(newReportCommand())
-	cmd.AddCommand(NewExcludeCommand(qs))
+
+	if deps.QuickExclude != nil {
+		cmd.AddCommand(NewExcludeCommand(deps.QuickExclude))
+	}
+
+	if deps.Auditor != nil {
+		cmd.AddCommand(newInspectCommand(deps.Auditor))
+		cmd.AddCommand(newAuditCommand(deps.Auditor))
+	}
+
+	if deps.RuleRepo != nil {
+		cmd.AddCommand(newRuleCommand(deps.RuleRepo))
+	}
+
+	if deps.Reporter != nil {
+		cmd.AddCommand(newReportCommand(deps.Reporter))
+	}
+
+	// TUI is registered in main.go via AddCommand after NewRootCommand returns
+	// to avoid circular dependency on the Bubble Tea program
 
 	return cmd
 }
 
-// Execute runs the root command with the given QuickExcludeService and exits on error.
-func Execute(qs *services.QuickExcludeService) error {
-	cmd := NewRootCommand(qs)
+// Execute runs the root command with the given dependencies and exits on error.
+func Execute(deps *CLIDependencies) error {
+	cmd := NewRootCommand(deps)
 	if err := cmd.Execute(); err != nil {
 		return fmt.Errorf("jart-stow: %w", err)
 	}
