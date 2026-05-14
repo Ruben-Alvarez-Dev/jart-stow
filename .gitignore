@@ -10,20 +10,6 @@
 # --- Go ---
 /go.sum
 
-# --- Python ---
-api/__pycache__/
-api/app/__pycache__/
-api/app/**/__pycache__/
-api/tui/__pycache__/
-api/tui/**/__pycache__/
-api/tests/__pycache__/
-api/*.pyc
-api/.venv/
-api/venv/
-api/.pytest_cache/
-api/.coverage
-api/coverage.xml
-
 # --- IDE ---
 .vscode/
 .idea/
@@ -46,6 +32,10 @@ Thumbs.db
 .DS_Store
 *.test
 coverage.out
+
+# --- TUI debug logs ---
+tui-debug.log
+tui-stderr.log
 
 # --- Legacy / personal docs ---
 /raw/

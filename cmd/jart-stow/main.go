@@ -19,6 +19,8 @@ import (
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/cli"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/ports"
 	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/services"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui"
+	"github.com/Ruben-Alvarez-Dev/jart-stow/internal/tui/core"
 
 	"github.com/spf13/cobra"
 )
@@ -46,6 +48,7 @@ func main() {
 
 	// Try to open DB for full-featured CLI commands
 	var deps *cli.CLIDependencies
+	var tuiDeps *core.TUIDependencies
 
 	dbPath := getDBPath()
 	conn, dbErr := sqlite.NewConnection(context.Background(), dbPath)
@@ -75,6 +78,23 @@ func main() {
 			EventRepo:     repos.Events,
 		}
 
+		tuiDeps = &core.TUIDependencies{
+			QuickExclude:  quickExcludeSvc,
+			ScanService:   scanService,
+			ExcludeService: excludeService,
+			Auditor:       auditor,
+			Reporter:      reporter,
+			JunkService:   junkService,
+			ProjectRepo:   repos.Projects,
+			ExclusionRepo: repos.Exclusions,
+			RuleRepo:      repos.Rules,
+			EventRepo:     repos.Events,
+			JunkCatRepo:   repos.JunkCategories,
+			JunkItemRepo:  repos.JunkItems,
+			WatchRootRepo: repos.WatchRoots,
+			DBAvailable:   true,
+		}
+
 		_ = excludeService
 		_ = junkService
 	} else {
@@ -82,10 +102,24 @@ func main() {
 		deps = &cli.CLIDependencies{
 			QuickExclude: quickExcludeSvc,
 		}
+		tuiDeps = &core.TUIDependencies{
+			QuickExclude: quickExcludeSvc,
+			ScanService:  scanService,
+			DBAvailable:  false,
+		}
 	}
 
 	// Create root command
 	cmd := cli.NewRootCommand(deps)
+
+	// Register tui subcommand
+	cmd.AddCommand(&cobra.Command{
+		Use:   "tui",
+		Short: "Launch the terminal user interface",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return tui.Run(tuiDeps)
+		},
+	})
 
 	// Override daemon run with real wiring
 	if daemonCmd := findCobraSubcommand(cmd, "daemon"); daemonCmd != nil {

@@ -1,6 +1,6 @@
 # Jart-Stow Build System
 
-.PHONY: build run test lint clean docs
+.PHONY: build run test lint clean docs tui tui-dev
 
 # --- Go ---
 
@@ -26,22 +26,13 @@ clean:
 	rm -f $(BINARY)
 	rm -f coverage.out
 
-# --- Python API ---
+# --- TUI ---
 
-api-install:
-	cd api && python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+tui: build
+	./$(BINARY) tui
 
-api-run:
-	cd api && uvicorn app.main:app --host 0.0.0.0 --port 8420 --reload
-
-api-test:
-	cd api && pytest --cov=app --cov-report=xml
-
-tui-install:
-	cd api && pip install -e ".[tui]"
-
-tui-run:
-	cd api && python -m tui.app
+tui-dev: build
+	./$(BINARY) tui 2>tui-debug.log
 
 # --- Docs ---
 
@@ -56,4 +47,4 @@ docs-deploy:
 
 # --- CI helpers ---
 
-ci: lint test api-test build
+ci: lint test build
