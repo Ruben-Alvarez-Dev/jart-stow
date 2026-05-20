@@ -66,8 +66,9 @@ func (r *stubExclusionRepo) FindByProjectID(_ context.Context, _ int64) ([]domai
 func (r *stubExclusionRepo) Save(_ context.Context, ex *domain.Exclusion) (*domain.Exclusion, error) {
 	return ex, nil
 }
-func (r *stubExclusionRepo) MarkRemoved(_ context.Context, _ int64) error { return nil }
-func (r *stubExclusionRepo) Delete(_ context.Context, _ int64) error      { return nil }
+func (r *stubExclusionRepo) SaveBulk(_ context.Context, _ []domain.Exclusion) error { return nil }
+func (r *stubExclusionRepo) MarkRemoved(_ context.Context, _ int64) error           { return nil }
+func (r *stubExclusionRepo) Delete(_ context.Context, _ int64) error                { return nil }
 
 // stubBackupProvider implements ports.BackupProvider for testing.
 type stubBackupProvider struct {
