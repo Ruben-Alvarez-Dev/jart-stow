@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -32,6 +33,9 @@ type MonitorService struct {
 
 	debounceDelay time.Duration
 	junkInterval  time.Duration
+
+	roots   []domain.WatchRoot
+	rootsMu sync.RWMutex
 }
 
 // MonitorConfig holds configuration for the monitor service.
@@ -90,12 +94,12 @@ func (m *MonitorService) Run(ctx context.Context) error {
 	defer cancel()
 
 	// Start watching configured roots
-	roots, err := m.watchRootRepo.FindAll(ctx)
-	if err != nil {
+	if err := m.refreshRoots(ctx); err != nil {
 		return fmt.Errorf("loading watch roots: %w", err)
 	}
 
-	for _, root := range roots {
+	m.rootsMu.RLock()
+	for _, root := range m.roots {
 		if !root.Enabled {
 			continue
 		}
@@ -103,6 +107,7 @@ func (m *MonitorService) Run(ctx context.Context) error {
 			log.Printf("event=watch_error path=%s error=%v", root.Path, err)
 		}
 	}
+	m.rootsMu.RUnlock()
 
 	// Create channels for event handling
 	newDirCh := make(chan string, 64)
@@ -152,12 +157,10 @@ func (m *MonitorService) handleFileEvent(ctx context.Context, event ports.FileSy
 	}
 
 	// Check if under a watch root
-	roots, err := m.watchRootRepo.FindAll(ctx)
-	if err != nil {
-		return
-	}
+	m.rootsMu.RLock()
+	defer m.rootsMu.RUnlock()
 
-	for _, root := range roots {
+	for _, root := range m.roots {
 		if !root.Enabled {
 			continue
 		}
@@ -179,6 +182,18 @@ func (m *MonitorService) handleFileEvent(ctx context.Context, event ports.FileSy
 		}(event.Path)
 		return
 	}
+}
+
+// refreshRoots loads all watch roots from the repository and updates the cache.
+func (m *MonitorService) refreshRoots(ctx context.Context) error {
+	roots, err := m.watchRootRepo.FindAll(ctx)
+	if err != nil {
+		return err
+	}
+	m.rootsMu.Lock()
+	m.roots = roots
+	m.rootsMu.Unlock()
+	return nil
 }
 
 // handleNewDirectory processes a newly detected project directory.
