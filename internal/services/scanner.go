@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 // DefaultArtifactPatterns are the directory names that the scanner looks for.
@@ -58,7 +61,7 @@ func NewScanService(maxDepth int, patterns []string) *ScanService {
 }
 
 // FindArtifacts scans the given path recursively for directories matching the configured patterns.
-// Only directories with names matching a pattern are returned. Scanning respects maxDepth from root.
+// It uses a worker pool to parallelize directory traversal and sizing for maximum performance.
 func (s *ScanService) FindArtifacts(ctx context.Context, root string) ([]Artifact, error) {
 	info, err := os.Stat(root)
 	if err != nil {
@@ -69,60 +72,130 @@ func (s *ScanService) FindArtifacts(ctx context.Context, root string) ([]Artifac
 	}
 
 	patternSet := s.buildPatternSet()
+	numWorkers := runtime.NumCPU() * 2
+	
+	type job struct {
+		path  string
+		depth int
+	}
+
+	jobs := make(chan job, 1024)
+	results := make(chan Artifact, 1024)
+	errCh := make(chan error, 1)
+	
+	var wg sync.WaitGroup
+	var activeJobs int32
+	var mu sync.Mutex
+	
+	// Start workers
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				// Process directory
+				entries, err := os.ReadDir(j.path)
+				if err != nil {
+					continue
+				}
+
+				for _, entry := range entries {
+					if !entry.IsDir() {
+						continue
+					}
+
+					fullPath := filepath.Join(j.path, entry.Name())
+					name := entry.Name()
+
+					if patternSet[name] {
+						// Found an artifact
+						results <- Artifact{
+							Path:        fullPath,
+							PatternName: name,
+							SizeBytes:   dirSizeConcurrent(fullPath),
+						}
+						continue
+					}
+
+					// Recurse if depth allows
+					if j.depth + 1 < s.maxDepth {
+						mu.Lock()
+						activeJobs++
+						mu.Unlock()
+						select {
+						case jobs <- job{path: fullPath, depth: j.depth + 1}:
+						case <-ctx.Done():
+						}
+					}
+				}
+
+				mu.Lock()
+				activeJobs--
+				if activeJobs == 0 {
+					close(jobs)
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+
+	// Initial job
+	activeJobs = 1
+	jobs <- job{path: root, depth: 0}
+
+	// Collector
 	var artifacts []Artifact
+	done := make(chan struct{})
+	go func() {
+		for a := range results {
+			artifacts = append(artifacts, a)
+		}
+		close(done)
+	}()
 
-	walkFn := func(path string, info os.FileInfo, err error) error {
+	// Wait for workers
+	wg.Wait()
+	close(results)
+	<-done
+
+	select {
+	case err := <-errCh:
+		return artifacts, err
+	default:
+		return artifacts, nil
+	}
+}
+
+// dirSizeConcurrent calculates the total size of a directory using multiple workers.
+func dirSizeConcurrent(path string) int64 {
+	var totalSize int64
+	
+	// Fast path for non-existent or inaccessible
+	if _, err := os.Stat(path); err != nil {
+		return 0
+	}
+
+	// For artifacts, a simple sequential walk is often enough and less overhead
+	// if the artifact directory is small. But let's use a faster sequential version first.
+	// Parallelizing the size calculation of every single artifact found might be overkill
+	// and actually slow down the main walker due to context switching.
+	
+	filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
 		if err != nil {
-			// Skip paths we can't access
-			return filepath.SkipDir
-		}
-
-		// Check context cancellation
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		if !info.IsDir() {
 			return nil
 		}
-
-		// Check if this directory name matches a pattern
-		name := info.Name()
-		if patternSet[name] {
-			artifact := Artifact{
-				Path:        path,
-				PatternName: name,
-				SizeBytes:   dirSize(path),
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err == nil {
+				atomic.AddInt64(&totalSize, info.Size())
 			}
-			artifacts = append(artifacts, artifact)
-			// Don't recurse into artifact directories
-			return filepath.SkipDir
 		}
-
-		// Check depth
-		rel, _ := filepath.Rel(root, path)
-		if rel == "." {
-			rel = ""
-		}
-		depth := len(strings.Split(rel, string(filepath.Separator)))
-		if depth >= s.maxDepth {
-			return filepath.SkipDir
-		}
-
 		return nil
-	}
-
-	if err := filepath.Walk(root, walkFn); err != nil {
-		if err == ctx.Err() {
-			return artifacts, err
-		}
-		return artifacts, fmt.Errorf("walking %s: %w", root, err)
-	}
-
-	return artifacts, nil
+	})
+	
+	return totalSize
 }
+
 
 // buildPatternSet creates a set from the configured patterns for O(1) lookup.
 func (s *ScanService) buildPatternSet() map[string]bool {

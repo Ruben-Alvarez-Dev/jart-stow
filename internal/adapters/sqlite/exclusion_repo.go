@@ -91,6 +91,39 @@ func (r *ExclusionRepo) Save(ctx context.Context, exclusion *domain.Exclusion) (
 	return r.FindByID(ctx, id)
 }
 
+func (r *ExclusionRepo) SaveBulk(ctx context.Context, exclusions []domain.Exclusion) error {
+	if len(exclusions) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO exclusions (project_id, folder_path, pattern_matched, backup_system,
+		                         size_bytes, applied_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, e := range exclusions {
+		_, err := stmt.ExecContext(ctx,
+			e.ProjectID, e.FolderPath, e.PatternMatched,
+			string(e.BackupSystem), e.SizeBytes, now, now,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 func (r *ExclusionRepo) MarkRemoved(ctx context.Context, id int64) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	result, err := r.db.ExecContext(ctx,

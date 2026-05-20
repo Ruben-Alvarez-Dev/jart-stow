@@ -27,6 +27,7 @@ type ExclusionRepository interface {
 	FindActive(ctx context.Context) ([]domain.Exclusion, error)
 	FindByPath(ctx context.Context, folderPath string) (*domain.Exclusion, error)
 	Save(ctx context.Context, exclusion *domain.Exclusion) (*domain.Exclusion, error)
+	SaveBulk(ctx context.Context, exclusions []domain.Exclusion) error
 	MarkRemoved(ctx context.Context, id int64) error
 }
 
