@@ -126,6 +126,7 @@ func (m *HygieneModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focusPanel == 0 {
 				if m.catCursor < len(m.categories)-1 {
 					m.catCursor++
+					return m, m.loadItemsCmd()
 				}
 				m.clampCatScroll()
 			} else {
@@ -138,6 +139,7 @@ func (m *HygieneModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focusPanel == 0 {
 				if m.catCursor > 0 {
 					m.catCursor--
+					return m, m.loadItemsCmd()
 				}
 				m.clampCatScroll()
 			} else {
@@ -159,6 +161,22 @@ func (m *HygieneModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					delete(m.checkedItems, id)
 				} else {
 					m.checkedItems[id] = true
+				}
+			} else if m.focusPanel == 0 && len(m.items) > 0 {
+				// Toggle all items in the current category
+				allChecked := true
+				for _, item := range m.items {
+					if !m.checkedItems[item.ID] {
+						allChecked = false
+						break
+					}
+				}
+				for _, item := range m.items {
+					if allChecked {
+						delete(m.checkedItems, item.ID)
+					} else {
+						m.checkedItems[item.ID] = true
+					}
 				}
 			}
 		case "enter":
@@ -193,6 +211,17 @@ func (m *HygieneModel) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *HygieneModel) loadItemsCmd() tea.Cmd {
+	if len(m.categories) == 0 || m.deps.JunkItemRepo == nil {
+		return nil
+	}
+	catID := m.categories[m.catCursor].ID
+	return func() tea.Msg {
+		items, err := m.deps.JunkItemRepo.FindByCategory(context.Background(), catID)
+		return core.HygieneItemsLoadMsg{Items: items, Err: err}
+	}
 }
 
 func (m *HygieneModel) catVisibleCount() int {
