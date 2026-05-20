@@ -227,6 +227,10 @@ type DashboardLoadMsg struct {
 // Scanner
 type ScanStartMsg struct{ Root string }
 
+type ScanProgressMsg struct {
+	Progress services.ScanProgress
+}
+
 type ScanResultMsg struct {
 	Results []services.QuickScanResult
 	Err     error
@@ -299,6 +303,10 @@ type HygieneVerifyMsg struct {
 	Status domain.VerificationStatus
 	Err    error
 }
+
+// KeyConsumedMsg signals that a screen handled a key (e.g. left/right)
+// and the MainModel should not process it for screen cycling.
+type KeyConsumedMsg struct{ Key string }
 
 // Report
 type ReportLoadMsg struct {

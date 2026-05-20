@@ -8,10 +8,18 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 )
+
+// ScanProgress represents the real-time state of an ongoing scan.
+type ScanProgress struct {
+	CurrentPath   string
+	ItemsFound    int
+	TotalSize     int64
+	ScanningDone  bool
+	FoundArtifact *Artifact
+}
 
 // DefaultArtifactPatterns are the directory names that the scanner looks for.
 // These cover the most common development artifact directories across languages.
@@ -71,31 +79,45 @@ func (s *ScanService) FindArtifacts(ctx context.Context, root string) ([]Artifac
 		return nil, fmt.Errorf("scanning %s: not a directory", root)
 	}
 
-	patternSet := s.buildPatternSet()
-	numWorkers := runtime.NumCPU() * 2
-	
-	type job struct {
-		path  string
-		depth int
-	}
+	var artifacts []*Artifact
+	var artMu sync.Mutex
+	var itemsFound int64
+	var totalSize int64
 
-	jobs := make(chan job, 1024)
-	results := make(chan Artifact, 1024)
-	errCh := make(chan error, 1)
-	
+	numWorkers := runtime.NumCPU() * 2
+	dirQueue := make(chan string, 1024)
 	var wg sync.WaitGroup
-	var activeJobs int32
-	var mu sync.Mutex
-	
-	// Start workers
+
+	patternSet := s.buildPatternSet()
+
+	var activeTasks int32 = 1
+	dirQueue <- root
+
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := range jobs {
-				// Process directory
-				entries, err := os.ReadDir(j.path)
+			for dir := range dirQueue {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				// Report progress: current directory
+				if progress != nil {
+					progress <- ScanProgress{
+						CurrentPath: dir,
+						ItemsFound:  int(atomic.LoadInt64(&itemsFound)),
+						TotalSize:   atomic.LoadInt64(&totalSize),
+					}
+				}
+
+				entries, err := os.ReadDir(dir)
 				if err != nil {
+					if atomic.AddInt32(&activeTasks, -1) == 0 {
+						close(dirQueue)
+					}
 					continue
 				}
 
@@ -104,66 +126,63 @@ func (s *ScanService) FindArtifacts(ctx context.Context, root string) ([]Artifac
 						continue
 					}
 
-					fullPath := filepath.Join(j.path, entry.Name())
 					name := entry.Name()
+					fullPath := filepath.Join(dir, name)
 
 					if patternSet[name] {
-						// Found an artifact
-						results <- Artifact{
+						size := dirSizeConcurrent(fullPath)
+						art := &Artifact{
 							Path:        fullPath,
 							PatternName: name,
-							SizeBytes:   dirSizeConcurrent(fullPath),
+							SizeBytes:   size,
 						}
-						continue
-					}
+						
+						artMu.Lock()
+						artifacts = append(artifacts, art)
+						artMu.Unlock()
+						
+						atomic.AddInt64(&itemsFound, 1)
+						atomic.AddInt64(&totalSize, size)
 
-					// Recurse if depth allows
-					if j.depth + 1 < s.maxDepth {
-						mu.Lock()
-						activeJobs++
-						mu.Unlock()
-						select {
-						case jobs <- job{path: fullPath, depth: j.depth + 1}:
-						case <-ctx.Done():
+						// Report artifact found
+						if progress != nil {
+							progress <- ScanProgress{
+								CurrentPath:   dir,
+								ItemsFound:    int(atomic.LoadInt64(&itemsFound)),
+								TotalSize:     atomic.LoadInt64(&totalSize),
+								FoundArtifact: art,
+							}
+						}
+					} else {
+						// Continue recursion if not an artifact and within depth
+						rel, _ := filepath.Rel(root, fullPath)
+						depth := len(strings.Split(rel, string(os.PathSeparator)))
+						if depth < 5 { // Hardcoded limit for safety, should be config
+							atomic.AddInt32(&activeTasks, 1)
+							select {
+							case dirQueue <- fullPath:
+							default:
+								// Queue full, fallback or drop (shouldn't happen with 1024 and depth 5)
+								atomic.AddInt32(&activeTasks, -1)
+							}
 						}
 					}
 				}
-
-				mu.Lock()
-				activeJobs--
-				if activeJobs == 0 {
-					close(jobs)
+				
+				if atomic.AddInt32(&activeTasks, -1) == 0 {
+					close(dirQueue)
 				}
-				mu.Unlock()
 			}
 		}()
 	}
 
-	// Initial job
-	activeJobs = 1
-	jobs <- job{path: root, depth: 0}
-
-	// Collector
-	var artifacts []Artifact
-	done := make(chan struct{})
-	go func() {
-		for a := range results {
-			artifacts = append(artifacts, a)
-		}
-		close(done)
-	}()
-
-	// Wait for workers
 	wg.Wait()
-	close(results)
-	<-done
-
-	select {
-	case err := <-errCh:
-		return artifacts, err
-	default:
-		return artifacts, nil
+	
+	if progress != nil {
+		progress <- ScanProgress{ScanningDone: true}
 	}
+	
+	return artifacts, nil
 }
 
 // dirSizeConcurrent calculates the total size of a directory using multiple workers.
