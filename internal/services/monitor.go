@@ -39,6 +39,7 @@ type MonitorService struct {
 	scanQueue     chan string
 	workerCount   int
 	detectionDepth int
+	wg            sync.WaitGroup
 }
 
 // MonitorConfig holds configuration for the monitor service.
@@ -196,14 +197,19 @@ func (m *MonitorService) handleFileEvent(ctx context.Context, event ports.FileSy
 // startWorkers launches the scan worker pool.
 func (m *MonitorService) startWorkers(ctx context.Context) {
 	for i := 0; i < m.workerCount; i++ {
+		m.wg.Add(1)
 		go func(workerID int) {
+			defer m.wg.Done()
 			log.Printf("event=worker_started id=%d", workerID)
 			for {
 				select {
 				case <-ctx.Done():
 					log.Printf("event=worker_stopped id=%d", workerID)
 					return
-				case path := <-m.scanQueue:
+				case path, ok := <-m.scanQueue:
+					if !ok {
+						return
+					}
 					m.handleNewDirectory(ctx, path)
 				}
 			}
@@ -310,6 +316,8 @@ func (m *MonitorService) runPeriodicJunkScan(ctx context.Context) {
 
 // shutdown performs a graceful shutdown: closes the watcher and logs the event.
 func (m *MonitorService) shutdown() error {
+	close(m.scanQueue)
+	m.wg.Wait()
 	if err := m.watcher.Close(); err != nil {
 		return fmt.Errorf("closing watcher: %w", err)
 	}
