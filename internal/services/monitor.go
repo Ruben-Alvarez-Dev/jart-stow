@@ -300,16 +300,20 @@ func (m *MonitorService) runPeriodicJunkScan(ctx context.Context) {
 		}
 		enabled++
 
-		items, err := m.junkService.ScanCategory(ctx, cat)
-		if err != nil {
-			log.Printf("event=junk_scan_category_error category=%s error=%v", cat.Name, err)
-			continue
-		}
-		for _, item := range items {
-			if _, err := m.junkItemRepo.Save(ctx, &item); err != nil {
-				log.Printf("event=junk_item_save_error category=%s path=%s error=%v", cat.Name, item.Path, err)
+		m.wg.Add(1)
+		go func(c domain.JunkCategory) {
+			defer m.wg.Done()
+			items, err := m.junkService.ScanCategory(ctx, c)
+			if err != nil {
+				log.Printf("event=junk_scan_category_error category=%s error=%v", c.Name, err)
+				return
 			}
-		}
+			for _, item := range items {
+				if _, err := m.junkItemRepo.Save(ctx, &item); err != nil {
+					log.Printf("event=junk_item_save_error category=%s path=%s error=%v", c.Name, item.Path, err)
+				}
+			}
+		}(cat)
 	}
 	log.Printf("event=junk_scan_completed categories=%d", enabled)
 }
