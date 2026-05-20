@@ -120,6 +120,17 @@ func (m *MonitorService) Run(ctx context.Context) error {
 	// Start workers
 	m.startWorkers(ctx)
 
+	// Boot Scan: Perform an initial parallel scan of all enabled roots
+	log.Println("event=boot_scan_started")
+	m.rootsMu.RLock()
+	for _, root := range m.roots {
+		if !root.Enabled {
+			continue
+		}
+		// Trigger an initial scan for the root itself
+		m.scanQueue <- root.Path
+	}
+	m.rootsMu.RUnlock()
 	// Create channels for event handling
 	junkTicker := time.NewTicker(m.junkInterval)
 	defer junkTicker.Stop()
