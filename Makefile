@@ -39,6 +39,8 @@ tui-dev: build
 docs-serve:
 	mkdocs serve
 
+docs: docs-build
+
 docs-build:
 	mkdocs build
 
