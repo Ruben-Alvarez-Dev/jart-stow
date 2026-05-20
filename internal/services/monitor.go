@@ -34,14 +34,17 @@ type MonitorService struct {
 	debounceDelay time.Duration
 	junkInterval  time.Duration
 
-	roots   []domain.WatchRoot
 	rootsMu sync.RWMutex
+
+	scanQueue   chan string
+	workerCount int
 }
 
 // MonitorConfig holds configuration for the monitor service.
 type MonitorConfig struct {
 	DebounceDelay time.Duration
 	JunkInterval  time.Duration
+	WorkerCount   int
 }
 
 // DefaultMonitorConfig returns sensible defaults for the monitor service.
@@ -49,6 +52,7 @@ func DefaultMonitorConfig() MonitorConfig {
 	return MonitorConfig{
 		DebounceDelay: 2 * time.Second,
 		JunkInterval:  24 * time.Hour,
+		WorkerCount:   4,
 	}
 }
 
@@ -81,6 +85,8 @@ func NewMonitorService(
 		junkService:      junkService,
 		debounceDelay:    cfg.DebounceDelay,
 		junkInterval:     cfg.JunkInterval,
+		scanQueue:        make(chan string, 100),
+		workerCount:      cfg.WorkerCount,
 	}
 }
 
@@ -103,14 +109,13 @@ func (m *MonitorService) Run(ctx context.Context) error {
 		if !root.Enabled {
 			continue
 		}
-		if err := m.watch(context.Background(), root); err != nil {
-			log.Printf("event=watch_error path=%s error=%v", root.Path, err)
-		}
 	}
 	m.rootsMu.RUnlock()
 
+	// Start workers
+	m.startWorkers(ctx)
+
 	// Create channels for event handling
-	newDirCh := make(chan string, 64)
 	junkTicker := time.NewTicker(m.junkInterval)
 	defer junkTicker.Stop()
 
@@ -122,13 +127,10 @@ func (m *MonitorService) Run(ctx context.Context) error {
 			return m.shutdown()
 
 		case event := <-m.watcher.Events():
-			m.handleFileEvent(ctx, event, newDirCh)
+			m.handleFileEvent(ctx, event)
 
 		case err := <-m.watcher.Errors():
 			log.Printf("event=watcher_error error=%v", err)
-
-		case path := <-newDirCh:
-			m.handleNewDirectory(ctx, path)
 
 		case <-junkTicker.C:
 			m.runPeriodicJunkScan(ctx)
@@ -143,7 +145,7 @@ func (m *MonitorService) watch(_ context.Context, root domain.WatchRoot) error {
 }
 
 // handleFileEvent processes a file system event from the watcher.
-func (m *MonitorService) handleFileEvent(ctx context.Context, event ports.FileSystemEvent, newDirCh chan<- string) {
+func (m *MonitorService) handleFileEvent(ctx context.Context, event ports.FileSystemEvent) {
 	if event.Op != ports.OpCreate {
 		return
 	}
@@ -176,11 +178,29 @@ func (m *MonitorService) handleFileEvent(ctx context.Context, event ports.FileSy
 		go func(path string) {
 			time.Sleep(m.debounceDelay)
 			select {
-			case newDirCh <- path:
+			case m.scanQueue <- path:
 			case <-ctx.Done():
 			}
 		}(event.Path)
 		return
+	}
+}
+
+// startWorkers launches the scan worker pool.
+func (m *MonitorService) startWorkers(ctx context.Context) {
+	for i := 0; i < m.workerCount; i++ {
+		go func(workerID int) {
+			log.Printf("event=worker_started id=%d", workerID)
+			for {
+				select {
+				case <-ctx.Done():
+					log.Printf("event=worker_stopped id=%d", workerID)
+					return
+				case path := <-m.scanQueue:
+					m.handleNewDirectory(ctx, path)
+				}
+			}
+		}(i)
 	}
 }
 
