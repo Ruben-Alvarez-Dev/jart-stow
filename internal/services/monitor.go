@@ -36,8 +36,9 @@ type MonitorService struct {
 
 	rootsMu sync.RWMutex
 
-	scanQueue   chan string
-	workerCount int
+	scanQueue     chan string
+	workerCount   int
+	detectionDepth int
 }
 
 // MonitorConfig holds configuration for the monitor service.
@@ -45,6 +46,7 @@ type MonitorConfig struct {
 	DebounceDelay time.Duration
 	JunkInterval  time.Duration
 	WorkerCount   int
+	DetectionDepth int
 }
 
 // DefaultMonitorConfig returns sensible defaults for the monitor service.
@@ -53,6 +55,7 @@ func DefaultMonitorConfig() MonitorConfig {
 		DebounceDelay: 2 * time.Second,
 		JunkInterval:  24 * time.Hour,
 		WorkerCount:   4,
+		DetectionDepth: 2,
 	}
 }
 
@@ -87,6 +90,7 @@ func NewMonitorService(
 		junkInterval:     cfg.JunkInterval,
 		scanQueue:        make(chan string, 100),
 		workerCount:      cfg.WorkerCount,
+		detectionDepth:   cfg.DetectionDepth,
 	}
 }
 
@@ -170,10 +174,13 @@ func (m *MonitorService) handleFileEvent(ctx context.Context, event ports.FileSy
 		if err != nil || strings.HasPrefix(rel, "..") {
 			continue
 		}
-		// Only process immediate children of the watch root (direct subdirectories)
-		if filepath.Dir(rel) != "." {
+		
+		// Check depth
+		parts := strings.Split(filepath.Clean(rel), string(os.PathSeparator))
+		if len(parts) > m.detectionDepth {
 			continue
 		}
+		
 		// Debounce
 		go func(path string) {
 			time.Sleep(m.debounceDelay)
